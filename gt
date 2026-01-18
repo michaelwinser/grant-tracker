@@ -1,0 +1,124 @@
+#!/bin/bash
+set -e
+
+IMAGE_NAME="grant-tracker-dev"
+CONTAINER_NAME="grant-tracker"
+
+usage() {
+    echo "Usage: ./gt <command>"
+    echo ""
+    echo "Commands:"
+    echo "  build       Rebuild the dev container"
+    echo "  start       Start the dev server (port 5173)"
+    echo "  stop        Stop the running container"
+    echo "  run <cmd>   Run a command in the container"
+    echo "  shell       Open a shell in the container"
+    echo "  logs        Show container logs"
+    echo "  status      Show container status"
+    echo ""
+    echo "Examples:"
+    echo "  ./gt build"
+    echo "  ./gt start"
+    echo "  ./gt run npm run build"
+    echo "  ./gt shell"
+}
+
+build() {
+    echo "Building container..."
+    docker build -t "$IMAGE_NAME" -f .devcontainer/Dockerfile .
+}
+
+start() {
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        echo "Container already running. Use './gt stop' first or './gt logs' to see output."
+        exit 1
+    fi
+
+    # Remove stopped container if exists
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+    echo "Starting dev server on http://localhost:5173"
+    docker run --rm -it \
+        --name "$CONTAINER_NAME" \
+        -p 5173:5173 \
+        -v "$(pwd)":/workspace \
+        "$IMAGE_NAME"
+}
+
+stop() {
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        echo "Stopping container..."
+        docker stop "$CONTAINER_NAME"
+    else
+        echo "Container not running."
+    fi
+}
+
+run_cmd() {
+    if [ $# -eq 0 ]; then
+        echo "Error: No command specified"
+        echo "Usage: ./gt run <command>"
+        exit 1
+    fi
+    docker run --rm -it \
+        -v "$(pwd)":/workspace \
+        "$IMAGE_NAME" \
+        "$@"
+}
+
+shell() {
+    docker run --rm -it \
+        -v "$(pwd)":/workspace \
+        "$IMAGE_NAME" \
+        /bin/bash
+}
+
+logs() {
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        docker logs -f "$CONTAINER_NAME"
+    else
+        echo "Container not running."
+    fi
+}
+
+status() {
+    if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
+        echo "Container is running"
+        docker ps -f name="$CONTAINER_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    else
+        echo "Container is not running"
+    fi
+}
+
+case "${1:-}" in
+    build)
+        build
+        ;;
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    run)
+        shift
+        run_cmd "$@"
+        ;;
+    shell)
+        shell
+        ;;
+    logs)
+        logs
+        ;;
+    status)
+        status
+        ;;
+    -h|--help|help|"")
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1"
+        usage
+        exit 1
+        ;;
+esac
