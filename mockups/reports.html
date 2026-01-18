@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grant Tracker - Reports</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            secondary: '#6366f1',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Navigation -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-14">
+        <div class="flex items-center space-x-8">
+          <span class="text-xl font-semibold text-gray-900">Grant Tracker</span>
+          <div class="hidden md:flex space-x-1">
+            <a href="index.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Dashboard</a>
+            <a href="grants.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Grants</a>
+            <a href="reports.html" class="px-3 py-2 text-sm font-medium text-primary bg-indigo-50 rounded-md">Reports</a>
+            <a href="budget.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Budget</a>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <button class="text-gray-500 hover:text-gray-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </button>
+          <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">M</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Page Header -->
+    <div class="mb-6">
+      <h1 class="text-2xl font-bold text-gray-900">Report Compliance</h1>
+      <p class="text-gray-500 mt-1">Track monthly, quarterly, and annual reports from grantees</p>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="text-2xl font-bold text-red-600">3</div>
+        <div class="text-sm text-gray-600">Overdue</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="text-2xl font-bold text-yellow-600">5</div>
+        <div class="text-sm text-gray-600">Due This Week</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="text-2xl font-bold text-green-600">12</div>
+        <div class="text-sm text-gray-600">Received This Month</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="text-2xl font-bold text-gray-900">18</div>
+        <div class="text-sm text-gray-600">Active Grantees</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+      <div class="flex flex-wrap gap-4">
+        <div class="w-40">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Period</label>
+          <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option selected>January 2025</option>
+            <option>December 2024</option>
+            <option>Q4 2024</option>
+            <option>2024 Annual</option>
+          </select>
+        </div>
+        <div class="w-40">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Report Type</label>
+          <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option>All Types</option>
+            <option>Monthly</option>
+            <option>Quarterly</option>
+            <option>Annual</option>
+          </select>
+        </div>
+        <div class="w-40">
+          <label class="block text-xs font-medium text-gray-500 mb-1">Status</label>
+          <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <option>All</option>
+            <option>Overdue</option>
+            <option>Expected</option>
+            <option>Received</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports Table -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grantee</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grant</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <!-- Overdue -->
+          <tr class="bg-red-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">Ruby Central</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">RUBY-2025-Staffing</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Monthly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2025-01</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 15</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">5 days overdue</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button class="text-sm text-indigo-600 hover:text-indigo-800">Mark received</button>
+            </td>
+          </tr>
+          <tr class="bg-red-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">Rust Foundation</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">RUST-2025-Audit</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Monthly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2025-01</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 15</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">5 days overdue</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button class="text-sm text-indigo-600 hover:text-indigo-800">Mark received</button>
+            </td>
+          </tr>
+          <tr class="bg-red-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">Apache Software Foundation</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">MAVEN-2025-SBOM</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Monthly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2025-01</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 15</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">5 days overdue</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button class="text-sm text-indigo-600 hover:text-indigo-800">Mark received</button>
+            </td>
+          </tr>
+          <!-- Due soon -->
+          <tr>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">Python Software Foundation</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">PYPI-2025-Security</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Monthly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2025-01</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 22</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Due in 3 days</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button class="text-sm text-indigo-600 hover:text-indigo-800">Mark received</button>
+            </td>
+          </tr>
+          <tr>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">OpenJS Foundation</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">NODE-2024-Security</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Quarterly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Q4 2024</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 25</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Due in 6 days</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button class="text-sm text-indigo-600 hover:text-indigo-800">Mark received</button>
+            </td>
+          </tr>
+          <!-- Received -->
+          <tr class="bg-green-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">Python Software Foundation</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">PYPI-2025-Security</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Monthly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-12</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 15</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Received Jan 13</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="#" class="text-sm text-indigo-600 hover:text-indigo-800">View →</a>
+            </td>
+          </tr>
+          <tr class="bg-green-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="text-sm font-medium text-gray-900">Capslock Security</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm text-indigo-600 hover:underline">CAPS-2025-Coverage</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Monthly</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">2024-12</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Jan 15</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Received Jan 10</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="#" class="text-sm text-indigo-600 hover:text-indigo-800">View →</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

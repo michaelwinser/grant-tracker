@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grant Tracker - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            secondary: '#6366f1',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .stage-pill { @apply px-2 py-1 rounded-full text-xs font-medium; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Navigation -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-14">
+        <div class="flex items-center space-x-8">
+          <span class="text-xl font-semibold text-gray-900">Grant Tracker</span>
+          <div class="hidden md:flex space-x-1">
+            <a href="index.html" class="px-3 py-2 text-sm font-medium text-primary bg-indigo-50 rounded-md">Dashboard</a>
+            <a href="grants.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Grants</a>
+            <a href="reports.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Reports</a>
+            <a href="budget.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Budget</a>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <button class="text-gray-500 hover:text-gray-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </button>
+          <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">M</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Page Header -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+      <p class="text-gray-500 mt-1">Overview of grants and action items</p>
+    </div>
+
+    <!-- Pipeline Summary -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Pipeline</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <a href="grants.html?status=initial-contact" class="block p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+          <div class="text-2xl font-bold text-gray-900">3</div>
+          <div class="text-sm text-gray-600">Initial Contact</div>
+        </a>
+        <a href="grants.html?status=evaluation" class="block p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+          <div class="text-2xl font-bold text-blue-700">2</div>
+          <div class="text-sm text-blue-600">Evaluation</div>
+        </a>
+        <a href="grants.html?status=proposal" class="block p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors">
+          <div class="text-2xl font-bold text-yellow-700">5</div>
+          <div class="text-sm text-yellow-600">Proposal Dev</div>
+        </a>
+        <a href="grants.html?status=review" class="block p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+          <div class="text-2xl font-bold text-purple-700">4</div>
+          <div class="text-sm text-purple-600">Stakeholder Review</div>
+        </a>
+        <a href="grants.html?status=signing" class="block p-4 bg-orange-50 rounded-lg hover:bg-orange-100 transition-colors">
+          <div class="text-2xl font-bold text-orange-700">1</div>
+          <div class="text-sm text-orange-600">Signing</div>
+        </a>
+        <a href="grants.html?status=active" class="block p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors">
+          <div class="text-2xl font-bold text-green-700">18</div>
+          <div class="text-sm text-green-600">Active</div>
+        </a>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-8">
+      <!-- My Action Items -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-gray-900">My Action Items</h2>
+          <span class="text-sm text-gray-500">5 open</span>
+        </div>
+        <ul class="divide-y divide-gray-100">
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-start gap-3">
+              <input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-gray-900">Review updated budget proposal</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  <a href="grant-detail.html" class="text-indigo-600 hover:underline">PYPI-2026-Packaging</a>
+                  · Due tomorrow
+                </p>
+              </div>
+              <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700">Overdue</span>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-start gap-3">
+              <input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-gray-900">Schedule kickoff call with Ruby Central</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  <a href="grant-detail.html" class="text-indigo-600 hover:underline">RUBY-2026-Staffing</a>
+                  · Due Jan 22
+                </p>
+              </div>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-start gap-3">
+              <input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-gray-900">Draft stakeholder summary for Rust security audit</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  <a href="grant-detail.html" class="text-indigo-600 hover:underline">RUST-2025-Audit</a>
+                  · Due Jan 24
+                </p>
+              </div>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-start gap-3">
+              <input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-gray-900">Follow up on contract terms</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  <a href="grant-detail.html" class="text-indigo-600 hover:underline">NODE-2025-Security</a>
+                  · Due Jan 25
+                </p>
+              </div>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-start gap-3">
+              <input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-gray-900">Prepare Q1 budget reconciliation</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  General
+                  · Due Jan 31
+                </p>
+              </div>
+            </div>
+          </li>
+        </ul>
+        <div class="px-6 py-3 border-t border-gray-100">
+          <button class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">+ Add action item</button>
+        </div>
+      </div>
+
+      <!-- Reports Due -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-gray-900">Reports Due</h2>
+          <a href="reports.html" class="text-sm text-indigo-600 hover:text-indigo-800">View all →</a>
+        </div>
+        <ul class="divide-y divide-gray-100">
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-900">Ruby Central</p>
+                <p class="text-xs text-gray-500">Monthly · January 2025</p>
+              </div>
+              <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700">5 days overdue</span>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-900">PyPI</p>
+                <p class="text-xs text-gray-500">Monthly · January 2025</p>
+              </div>
+              <span class="inline-flex items-center rounded-full bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-700">Due in 3 days</span>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-900">Rust Foundation</p>
+                <p class="text-xs text-gray-500">Quarterly · Q4 2024</p>
+              </div>
+              <span class="inline-flex items-center rounded-full bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-700">Due in 5 days</span>
+            </div>
+          </li>
+          <li class="px-6 py-4 hover:bg-gray-50">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-900">Node.js Foundation</p>
+                <p class="text-xs text-gray-500">Monthly · January 2025</p>
+              </div>
+              <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">Due Jan 31</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="mt-8 bg-white rounded-lg shadow-sm border border-gray-200">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">Recent Activity</h2>
+      </div>
+      <ul class="divide-y divide-gray-100">
+        <li class="px-6 py-4">
+          <div class="flex gap-4">
+            <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm text-gray-900">
+                <a href="grant-detail.html" class="font-medium text-indigo-600 hover:underline">CAPS-2025-Coverage</a>
+                moved to <span class="font-medium">Active</span>
+              </p>
+              <p class="text-xs text-gray-500 mt-1">Michael · 2 hours ago</p>
+            </div>
+          </div>
+        </li>
+        <li class="px-6 py-4">
+          <div class="flex gap-4">
+            <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm text-gray-900">
+                Monthly report received for <a href="grant-detail.html" class="font-medium text-indigo-600 hover:underline">PYPI-2025-Security</a>
+              </p>
+              <p class="text-xs text-gray-500 mt-1">via GitHub · 5 hours ago</p>
+            </div>
+          </div>
+        </li>
+        <li class="px-6 py-4">
+          <div class="flex gap-4">
+            <div class="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm text-gray-900">
+                New comment on <a href="grant-detail.html" class="font-medium text-indigo-600 hover:underline">RUBY-2026-Staffing</a> internal notes
+              </p>
+              <p class="text-xs text-gray-500 mt-1">Sarah · Yesterday</p>
+            </div>
+          </div>
+        </li>
+        <li class="px-6 py-4">
+          <div class="flex gap-4">
+            <div class="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm text-gray-900">
+                New grant created: <a href="grant-detail.html" class="font-medium text-indigo-600 hover:underline">GOLANG-2026-Supply</a>
+              </p>
+              <p class="text-xs text-gray-500 mt-1">Michael · Yesterday</p>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

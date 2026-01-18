@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grant Tracker - Budget</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            secondary: '#6366f1',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Navigation -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-14">
+        <div class="flex items-center space-x-8">
+          <span class="text-xl font-semibold text-gray-900">Grant Tracker</span>
+          <div class="hidden md:flex space-x-1">
+            <a href="index.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Dashboard</a>
+            <a href="grants.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Grants</a>
+            <a href="reports.html" class="px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md">Reports</a>
+            <a href="budget.html" class="px-3 py-2 text-sm font-medium text-primary bg-indigo-50 rounded-md">Budget</a>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <button class="text-gray-500 hover:text-gray-700">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </button>
+          <div class="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-sm font-medium">M</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Page Header -->
+    <div class="flex justify-between items-start mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Budget Allocation</h1>
+        <p class="text-gray-500 mt-1">Grant year funding by category</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <select class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+          <option>2026</option>
+          <option selected>2025</option>
+          <option>2024</option>
+          <option>2023</option>
+          <option>All Years</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div class="text-sm text-gray-500">Total Committed</div>
+        <div class="text-2xl font-bold text-gray-900 mt-1">$2.4M</div>
+        <div class="text-xs text-green-600 mt-1">↑ 15% vs 2024</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-blue-200 p-4">
+        <div class="text-sm text-blue-600 font-medium">Category A</div>
+        <div class="text-2xl font-bold text-blue-700 mt-1">$1.1M</div>
+        <div class="text-xs text-gray-500 mt-1">46% of total</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-green-200 p-4">
+        <div class="text-sm text-green-600 font-medium">Category B</div>
+        <div class="text-2xl font-bold text-green-700 mt-1">$580K</div>
+        <div class="text-xs text-gray-500 mt-1">24% of total</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-orange-200 p-4">
+        <div class="text-sm text-orange-600 font-medium">Category C</div>
+        <div class="text-2xl font-bold text-orange-700 mt-1">$480K</div>
+        <div class="text-xs text-gray-500 mt-1">20% of total</div>
+      </div>
+      <div class="bg-white rounded-lg shadow-sm border border-purple-200 p-4">
+        <div class="text-sm text-purple-600 font-medium">Category D</div>
+        <div class="text-2xl font-bold text-purple-700 mt-1">$240K</div>
+        <div class="text-xs text-gray-500 mt-1">10% of total</div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-8 mb-8">
+      <!-- Pie Chart -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Allocation by Category</h2>
+        <div class="h-64 flex items-center justify-center">
+          <canvas id="categoryChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Year over Year -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Year over Year</h2>
+        <div class="h-64">
+          <canvas id="yearChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed Breakdown -->
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">2025 Grant Details</h2>
+      </div>
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grant</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organization</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">RUBY-2025-Staffing</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Ruby Central</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">A</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Grant</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$180,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">PYPI-2025-Security</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Python Software Foundation</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">A</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Grant</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$200,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">CAPS-2025-Coverage</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Capslock Security</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">B</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Contract</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$75,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">RUST-2025-Audit</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Rust Foundation</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">C</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Grant</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$120,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">NODE-2025-Security</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">OpenJS Foundation</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">A</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Grant</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$200,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">Signing</span>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">MAVEN-2025-SBOM</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Apache Software Foundation</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">C</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Grant</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$85,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+            </td>
+          </tr>
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 whitespace-nowrap">
+              <a href="grant-detail.html" class="text-sm font-medium text-indigo-600 hover:underline">NPM-2025-Provenance</a>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">GitHub / npm</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">D</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">Contract</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">$100,000</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Finished</span>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot class="bg-gray-50">
+          <tr>
+            <td colspan="4" class="px-6 py-4 text-sm font-medium text-gray-900">Total (7 grants shown)</td>
+            <td class="px-6 py-4 text-right text-sm font-bold text-gray-900">$960,000</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    // Category Pie Chart
+    const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(categoryCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Category A', 'Category B', 'Category C', 'Category D'],
+        datasets: [{
+          data: [1100000, 580000, 480000, 240000],
+          backgroundColor: ['#3b82f6', '#22c55e', '#f97316', '#a855f7'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right'
+          }
+        }
+      }
+    });
+
+    // Year over Year Bar Chart
+    const yearCtx = document.getElementById('yearChart').getContext('2d');
+    new Chart(yearCtx, {
+      type: 'bar',
+      data: {
+        labels: ['2022', '2023', '2024', '2025'],
+        datasets: [
+          {
+            label: 'Category A',
+            data: [600000, 800000, 950000, 1100000],
+            backgroundColor: '#3b82f6'
+          },
+          {
+            label: 'Category B',
+            data: [300000, 400000, 500000, 580000],
+            backgroundColor: '#22c55e'
+          },
+          {
+            label: 'Category C',
+            data: [200000, 300000, 400000, 480000],
+            backgroundColor: '#f97316'
+          },
+          {
+            label: 'Category D',
+            data: [100000, 150000, 200000, 240000],
+            backgroundColor: '#a855f7'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true },
+          y: { 
+            stacked: true,
+            ticks: {
+              callback: function(value) {
+                return '$' + (value / 1000000).toFixed(1) + 'M';
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            position: 'bottom'
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
