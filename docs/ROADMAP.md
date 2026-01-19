@@ -99,24 +99,24 @@ Build the Sheets API wrapper and Svelte stores for data management.
 
 ## Phase 4: Grant Registry & Display
 
-**Status: Not Started**
+**Status: Complete**
 
 Implement grant list and detail views.
 
-- [ ] Grant list view (`/grants`)
-  - [ ] Fetch and display grants from Sheets
-  - [ ] Sortable columns (ID, title, organization, status, amount)
-  - [ ] Filter by: status, category, type, program manager, year
-  - [ ] Search by title/organization
-  - [ ] Pagination or virtual scrolling for large lists
-- [ ] Grant detail view (`/grant/[id]`)
-  - [ ] Display all grant fields
-  - [ ] Document links (Proposal, Internal Notes, Drive Folder, GitHub)
-  - [ ] Category allocation display (percentage breakdown)
-  - [ ] Status badge with visual indicator
-- [ ] Permalink routing with SvelteKit or hash-based routing
-- [ ] Loading states and empty states
-- [ ] Grant ID generation utility (`CODE-YEAR-Codename` format)
+- [x] Grant list view (`/grants`)
+  - [x] Fetch and display grants from Sheets
+  - [x] Sortable columns (ID, title, organization, status, amount)
+  - [x] Filter by: status, category, type, program manager, year
+  - [x] Search by title/organization
+  - [ ] Pagination or virtual scrolling for large lists (deferred - not needed yet)
+- [x] Grant detail view (`/grant/[id]`)
+  - [x] Display all grant fields
+  - [x] Document links (Proposal, Internal Notes, Drive Folder, GitHub)
+  - [x] Category allocation display (percentage breakdown)
+  - [x] Status badge with visual indicator
+- [x] Permalink routing with SvelteKit or hash-based routing
+- [x] Loading states and empty states
+- [x] Grant ID generation utility (`CODE-YEAR-Codename` format)
 
 **Blocked by:** Phase 3
 **Blocks:** Nothing directly (can develop in parallel with Phase 5+)

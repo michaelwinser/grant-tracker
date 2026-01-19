@@ -1,11 +1,14 @@
 <script>
   import { userStore } from './lib/stores/user.svelte.js';
   import { spreadsheetStore } from './lib/stores/spreadsheet.svelte.js';
-  import { dataStore, grantsStore, actionItemsStore, reportsStore } from './lib/stores/data.svelte.js';
+  import { dataStore } from './lib/stores/data.svelte.js';
+  import { router } from './lib/router.svelte.js';
   import SignInButton from './lib/components/SignInButton.svelte';
-  import UserMenu from './lib/components/UserMenu.svelte';
+  import NavBar from './lib/components/NavBar.svelte';
   import SpreadsheetPicker from './lib/components/SpreadsheetPicker.svelte';
-  import SpreadsheetInfo from './lib/components/SpreadsheetInfo.svelte';
+  import Dashboard from './lib/components/Dashboard.svelte';
+  import GrantList from './lib/components/GrantList.svelte';
+  import GrantDetail from './lib/components/GrantDetail.svelte';
   import { validateSchema } from './lib/api/sheets.js';
 
   let title = 'Grant Tracker';
@@ -106,12 +109,12 @@
   }
 </script>
 
-<main class="min-h-screen bg-gray-50">
+<div class="min-h-screen bg-gray-50">
   {#if userStore.isLoading}
     <!-- Loading state -->
     <div class="min-h-screen flex items-center justify-center">
       <div class="text-center">
-        <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <svg class="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -132,7 +135,7 @@
           <p class="text-gray-600 mb-6">{userStore.error}</p>
           <button
             onclick={handleTryDifferentAccount}
-            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
             Try a different account
           </button>
@@ -159,26 +162,16 @@
     </div>
   {:else}
     <!-- Authenticated state -->
-    <header class="bg-blue-600 text-white shadow-lg">
-      <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <h1 class="text-xl font-bold">{title}</h1>
-          {#if spreadsheetStore.hasSpreadsheet && spreadsheetStore.isValidated}
-            <SpreadsheetInfo />
-          {/if}
-        </div>
-        <UserMenu />
-      </div>
-    </header>
+    <NavBar />
 
-    <div class="max-w-7xl mx-auto px-4 py-8">
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {#if !spreadsheetStore.hasSpreadsheet || showInitializePrompt}
         <!-- Spreadsheet selection state -->
         <SpreadsheetPicker />
       {:else if spreadsheetStore.isLoading || isValidatingStored}
         <!-- Validating stored spreadsheet -->
         <div class="text-center py-12">
-          <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg class="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
@@ -187,7 +180,7 @@
       {:else if spreadsheetStore.isValidated && dataStore.isLoading}
         <!-- Loading data -->
         <div class="text-center py-12">
-          <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <svg class="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
@@ -211,39 +204,14 @@
           </div>
         </div>
       {:else if spreadsheetStore.isValidated && dataStore.isLoaded}
-        <!-- Main app content -->
-        <div class="bg-white rounded-lg shadow p-6">
-          <p class="text-gray-600 mb-4">
-            Welcome, {userStore.user?.name || 'User'}!
-          </p>
-
-          <!-- Quick stats -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div class="bg-blue-50 rounded-lg p-4">
-              <p class="text-sm text-blue-600 font-medium">Total Grants</p>
-              <p class="text-2xl font-bold text-blue-900">{grantsStore.grantCount}</p>
-            </div>
-            <div class="bg-green-50 rounded-lg p-4">
-              <p class="text-sm text-green-600 font-medium">Active Grants</p>
-              <p class="text-2xl font-bold text-green-900">{grantsStore.activeGrants.length}</p>
-            </div>
-            <div class="bg-yellow-50 rounded-lg p-4">
-              <p class="text-sm text-yellow-600 font-medium">Open Action Items</p>
-              <p class="text-2xl font-bold text-yellow-900">{actionItemsStore.openItems.length}</p>
-            </div>
-            <div class="bg-red-50 rounded-lg p-4">
-              <p class="text-sm text-red-600 font-medium">Overdue Reports</p>
-              <p class="text-2xl font-bold text-red-900">{reportsStore.overdueReports.length}</p>
-            </div>
-          </div>
-
-          <p class="text-gray-500 text-sm">
-            Connected to: <a href={spreadsheetStore.spreadsheetUrl} target="_blank" class="text-blue-600 hover:underline">{spreadsheetStore.spreadsheetName}</a>
-          </p>
-          <p class="text-gray-400 mt-2 text-sm">
-            Full views and interactions will be implemented in Phase 4+.
-          </p>
-        </div>
+        <!-- Main app content with routing -->
+        {#if router.route === 'grants'}
+          <GrantList />
+        {:else if router.route === 'grant-detail'}
+          <GrantDetail />
+        {:else}
+          <Dashboard />
+        {/if}
       {:else}
         <!-- Spreadsheet error state -->
         <div class="max-w-lg mx-auto">
@@ -262,6 +230,6 @@
           </div>
         </div>
       {/if}
-    </div>
+    </main>
   {/if}
-</main>
+</div>
