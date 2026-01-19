@@ -3,8 +3,11 @@
 token.json
 service-account.json
 
-# Python
-__pycache__/
-*.pyc
+# Python virtual environment
 .venv/
 venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
