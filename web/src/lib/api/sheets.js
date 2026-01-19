@@ -361,11 +361,17 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
         columnName,
       };
 
-      // Add dropdown type if this column has defined values
+      // Add dropdown type with validation rule if this column has defined values
       if (validations[columnName]) {
         colDef.columnType = 'DROPDOWN';
+        colDef.dataValidationRule = {
+          condition: {
+            type: 'ONE_OF_LIST',
+            values: validations[columnName].map((v) => ({ userEnteredValue: v })),
+          },
+        };
       } else if (columnTypes[columnName]) {
-        // Apply specific column type (NUMBER, DATE, PERCENT, etc.)
+        // Apply specific column type (DATE, PERCENT, etc.)
         colDef.columnType = columnTypes[columnName];
       }
 
