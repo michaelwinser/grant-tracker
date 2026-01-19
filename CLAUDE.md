@@ -121,6 +121,15 @@ When starting work on a feature:
 
 This helps maintain continuity across sessions and keeps everyone aligned on project status.
 
+## Working Efficiently
+
+When permissions are granted in `.claude/settings.json`, use them without asking for confirmation. For example:
+- If `Bash(git *)` is allowed, just commit when work is complete—don't ask "would you like me to commit?"
+- If file edits are allowed, make the edits directly
+- Reserve questions for actual ambiguity about *what* to do, not *whether* to use permitted tools
+
+This keeps the workflow efficient and avoids unnecessary back-and-forth.
+
 ## Design Decisions
 
 - **Action items**: Stored in Sheet (not Internal Notes doc) for queryability
