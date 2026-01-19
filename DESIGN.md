@@ -73,7 +73,10 @@ The spreadsheet uses Google Sheets **Tables** feature for schema enforcement. Ta
 | `contact_name` | String | | Primary contact person |
 | `contact_email` | String | Email format | Contact email |
 | `type` | Dropdown | `Grant`, `Contract` | Deal type |
-| `category` | Dropdown | `A`, `B`, `C`, `D` | Budget category |
+| `category_a_pct` | Number | 0-100, default 0 | % allocation to Category A |
+| `category_b_pct` | Number | 0-100, default 0 | % allocation to Category B |
+| `category_c_pct` | Number | 0-100, default 0 | % allocation to Category C |
+| `category_d_pct` | Number | 0-100, default 0 | % allocation to Category D |
 | `ecosystem` | String | | Ecosystem beneficiary |
 | `amount` | Currency | | Grant/contract value |
 | `grant_year` | Number | YYYY | Year of work (not disbursement) |
@@ -286,7 +289,7 @@ src/
 **2. Grant List (`/grants`)**
 - Table view of all grants
 - Sortable by any column
-- Filterable by: Status, Category, Type, PM, Year
+- Filterable by: Status, Category (any allocation), Type, PM, Year
 - Search by title/organization
 - Quick status badge
 
@@ -312,9 +315,9 @@ src/
 - Quick "mark received" action
 
 **6. Budget (`/budget`)**
-- Allocation by category (pie/bar chart)
+- Allocation by category (pie/bar chart), calculated from per-grant percentage splits
 - Grant year selector
-- Table breakdown
+- Table breakdown showing weighted amounts per category
 - Year-over-year comparison (if historical data present)
 
 ### Client-Side Data Management
@@ -503,12 +506,18 @@ function getConfig() {
 function onEdit(e) {
   const sheet = e.source.getActiveSheet();
   if (sheet.getName() !== 'Grants') return;
-  
+
   const col = e.range.getColumn();
+  const row = e.range.getRow();
   const grantIdCol = 1; // Adjust based on actual column
-  
+  const categoryPctCols = [6, 7, 8, 9]; // category_a_pct through category_d_pct
+
   if (col === grantIdCol) {
     validateGrantIdUnique(e.range);
+  }
+
+  if (categoryPctCols.includes(col)) {
+    validateCategoryPercentages(sheet, row, categoryPctCols);
   }
 }
 
@@ -516,7 +525,7 @@ function validateGrantIdUnique(cell) {
   const sheet = cell.getSheet();
   const grantId = cell.getValue();
   const allIds = sheet.getRange('A:A').getValues().flat().filter(Boolean);
-  
+
   const count = allIds.filter(id => id === grantId).length;
   if (count > 1) {
     cell.setNote('⚠️ Duplicate grant ID!');
@@ -524,6 +533,20 @@ function validateGrantIdUnique(cell) {
   } else {
     cell.clearNote();
     cell.setBackground(null);
+  }
+}
+
+function validateCategoryPercentages(sheet, row, cols) {
+  const values = cols.map(col => sheet.getRange(row, col).getValue() || 0);
+  const sum = values.reduce((a, b) => a + b, 0);
+  const firstCell = sheet.getRange(row, cols[0]);
+
+  if (sum !== 100) {
+    firstCell.setNote(`⚠️ Category percentages sum to ${sum}%, must equal 100%`);
+    cols.forEach(col => sheet.getRange(row, col).setBackground('#ffcccc'));
+  } else {
+    firstCell.clearNote();
+    cols.forEach(col => sheet.getRange(row, col).setBackground(null));
   }
 }
 
@@ -826,6 +849,7 @@ export async function createGrantFolder(
 - [ ] Duplicate grant ID shows warning
 - [ ] Invalid status values rejected
 - [ ] Required fields enforced
+- [ ] Category percentages must sum to 100%
 
 ---
 

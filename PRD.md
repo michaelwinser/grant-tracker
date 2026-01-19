@@ -103,7 +103,7 @@ The organization currently manages this in Google Sheets, which works but provid
 **FR-2: Grant Detail Record**
 - Organization name, primary contact
 - Type: Grant or Contract
-- Category: A, B, C, or D (configurable for future evolution)
+- Category allocation: Percentage split across A, B, C, D (must total 100%)
 - Ecosystem beneficiary
 - Amount, grant year, disbursement schedule notes
 - Current status (lifecycle stage)
@@ -112,7 +112,7 @@ The organization currently manages this in Google Sheets, which works but provid
 
 **FR-3: Status Tracking**
 - Visual pipeline view showing grants by stage
-- Filter by: Category, Type, Program Manager, Status
+- Filter by: Category (grants with any allocation), Type, Program Manager, Status
 - Status change history preserved (who, when, from/to)
 
 **FR-4: Permalinks**
@@ -162,8 +162,8 @@ The organization currently manages this in Google Sheets, which works but provid
 ### Budget & Reporting
 
 **FR-11: Budget Allocation View**
-- Total committed/disbursed by category (A/B/C/D)
-- Grant year aware (Category A staffing grants attributed to year of work)
+- Total committed/disbursed by category (A/B/C/D), calculated from percentage allocations
+- Grant year aware (e.g., staffing grants attributed to year of work)
 - Current year vs historical comparison
 
 **FR-12: Historical Data**
