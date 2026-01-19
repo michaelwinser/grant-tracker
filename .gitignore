@@ -22,6 +22,9 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Claude conversations
+./conversations
+
 # Cache
 .cache/
 

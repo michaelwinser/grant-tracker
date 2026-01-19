@@ -16,7 +16,8 @@
       "Bash(wc *)",
       "Edit(./**)",
       "Write(./**)",
-      "Read(./**)"
+      "Read(./**)",
+      "WebSearch"
     ],
     "deny": []
   }
