@@ -9,6 +9,9 @@ web/dist/
 .env.local
 .env.*.local
 
+# Key files
+./keys
+
 # Editor directories
 .vscode/*
 !.vscode/extensions.json
