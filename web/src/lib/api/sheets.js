@@ -144,6 +144,41 @@ export const SCHEMA = {
 };
 
 /**
+ * Column types for Tables.
+ * Maps sheet name -> column name -> column type.
+ * Available types: TEXT, NUMERIC, DATE, DROPDOWN, CHECKBOX, SMART_CHIP, PERCENT
+ */
+export const COLUMN_TYPES = {
+  Grants: {
+    category_a_pct: 'PERCENT',
+    category_b_pct: 'PERCENT',
+    category_c_pct: 'PERCENT',
+    category_d_pct: 'PERCENT',
+    amount: 'NUMERIC', // Will format as currency in Sheets
+    grant_year: 'NUMERIC',
+    created_at: 'DATE',
+    updated_at: 'DATE',
+    status_changed_at: 'DATE',
+  },
+  ActionItems: {
+    due_date: 'DATE',
+    created_at: 'DATE',
+    completed_at: 'DATE',
+  },
+  Reports: {
+    due_date: 'DATE',
+    received_date: 'DATE',
+  },
+  Artifacts: {
+    date: 'DATE',
+    created_at: 'DATE',
+  },
+  StatusHistory: {
+    changed_at: 'DATE',
+  },
+};
+
+/**
  * Data validation rules for dropdown columns.
  * Maps sheet name -> column name -> list of valid values.
  */
@@ -316,6 +351,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
     if (!headers) continue;
 
     // Build column properties for the Table
+    const columnTypes = COLUMN_TYPES[sheetName] || {};
     const columnProperties = headers.map((columnName, columnIndex) => {
       const colDef = {
         columnIndex,
@@ -331,6 +367,9 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
             values: validations[columnName].map((v) => ({ userEnteredValue: v })),
           },
         };
+      } else if (columnTypes[columnName]) {
+        // Apply specific column type
+        colDef.columnType = columnTypes[columnName];
       }
 
       return colDef;
