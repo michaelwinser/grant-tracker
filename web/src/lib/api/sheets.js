@@ -146,8 +146,10 @@ export const SCHEMA = {
 /**
  * Column types for Tables.
  * Maps sheet name -> column name -> column type.
- * Supported types: NUMBER, TEXT, DATE, DATE_TIME, CHECKBOX, DROPDOWN, PERCENT,
- *                  PEOPLE_CHIP, FILE_CHIP, RATING_CHIP
+ * Note: The batchUpdate addTable API only supports limited types.
+ * Confirmed working: PERCENT, DROPDOWN
+ * Testing: DATE
+ * Not working: NUMERIC, NUMBER
  * DROPDOWN is handled separately via VALIDATIONS.
  */
 export const COLUMN_TYPES = {
@@ -156,8 +158,7 @@ export const COLUMN_TYPES = {
     category_b_pct: 'PERCENT',
     category_c_pct: 'PERCENT',
     category_d_pct: 'PERCENT',
-    amount: 'NUMBER',
-    grant_year: 'NUMBER',
+    // Testing DATE type
     created_at: 'DATE',
     updated_at: 'DATE',
     status_changed_at: 'DATE',
