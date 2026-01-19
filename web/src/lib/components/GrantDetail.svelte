@@ -1,11 +1,12 @@
 <script>
   import { grantsStore } from '../stores/grants.svelte.js';
   import { actionItemsStore } from '../stores/actionItems.svelte.js';
+  import { artifactsStore } from '../stores/artifacts.svelte.js';
   import { statusHistoryStore } from '../stores/statusHistory.svelte.js';
   import { configStore } from '../stores/config.svelte.js';
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
-  import { GrantStatus, GRANT_STATUS_ORDER } from '../models.js';
+  import { GrantStatus, GRANT_STATUS_ORDER, ArtifactType } from '../models.js';
 
   let isUpdatingStatus = $state(false);
   let statusError = $state(null);
@@ -17,6 +18,16 @@
   let newItemDueDate = $state('');
   let isCreatingItem = $state(false);
   let itemError = $state(null);
+
+  // Artifact form state
+  let showAddArtifact = $state(false);
+  let newArtifactType = $state('');
+  let newArtifactTitle = $state('');
+  let newArtifactUrl = $state('');
+  let newArtifactDate = $state('');
+  let isCreatingArtifact = $state(false);
+  let artifactError = $state(null);
+  let deletingArtifactId = $state(null);
 
   let grant = $derived(() => {
     const grantId = router.params.id;
@@ -44,6 +55,12 @@
     } catch {
       return [];
     }
+  });
+
+  let grantArtifacts = $derived(() => {
+    if (!grant()) return [];
+    return artifactsStore.getByGrantId(grant().grant_id)
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   });
 
   async function handleStatusChange(event) {
@@ -118,6 +135,73 @@
     newItemAssignee = '';
     newItemDueDate = '';
     itemError = null;
+  }
+
+  async function handleCreateArtifact() {
+    if (!newArtifactTitle.trim() || !newArtifactUrl.trim()) return;
+
+    isCreatingArtifact = true;
+    artifactError = null;
+
+    try {
+      await artifactsStore.create({
+        grant_id: grant().grant_id,
+        artifact_type: newArtifactType || ArtifactType.OTHER,
+        title: newArtifactTitle.trim(),
+        url: newArtifactUrl.trim(),
+        date: newArtifactDate || null,
+      });
+
+      // Reset form
+      newArtifactType = '';
+      newArtifactTitle = '';
+      newArtifactUrl = '';
+      newArtifactDate = '';
+      showAddArtifact = false;
+    } catch (err) {
+      artifactError = err.message;
+    } finally {
+      isCreatingArtifact = false;
+    }
+  }
+
+  function handleCancelArtifact() {
+    showAddArtifact = false;
+    newArtifactType = '';
+    newArtifactTitle = '';
+    newArtifactUrl = '';
+    newArtifactDate = '';
+    artifactError = null;
+  }
+
+  async function handleDeleteArtifact(artifactId) {
+    if (!confirm('Delete this artifact?')) return;
+
+    deletingArtifactId = artifactId;
+    artifactError = null;
+
+    try {
+      await artifactsStore.remove(artifactId);
+    } catch (err) {
+      artifactError = err.message;
+    } finally {
+      deletingArtifactId = null;
+    }
+  }
+
+  function getArtifactIcon(type) {
+    switch (type) {
+      case ArtifactType.BLOG_POST:
+        return 'M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z';
+      case ArtifactType.MEETING_NOTES:
+        return 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z';
+      case ArtifactType.ANNOUNCEMENT:
+        return 'M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z';
+      case ArtifactType.FINAL_REPORT:
+        return 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z';
+      default:
+        return 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1';
+    }
   }
 
   function formatAmount(amount) {
@@ -483,6 +567,138 @@
               class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
             >
               + Add action item
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Artifacts -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-gray-900">Artifacts</h2>
+          <span class="text-sm text-gray-500">{grantArtifacts().length} linked</span>
+        </div>
+        {#if artifactError}
+          <div class="px-6 py-2 bg-red-50 border-b border-red-100">
+            <p class="text-sm text-red-700">{artifactError}</p>
+          </div>
+        {/if}
+        {#if grantArtifacts().length === 0 && !showAddArtifact}
+          <div class="px-6 py-8 text-center text-gray-500">
+            <p>No artifacts linked yet.</p>
+          </div>
+        {:else}
+          <ul class="divide-y divide-gray-100">
+            {#each grantArtifacts() as artifact (artifact.artifact_id)}
+              <li class="px-6 py-4 hover:bg-gray-50 group">
+                <div class="flex items-start gap-3">
+                  <div class="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getArtifactIcon(artifact.artifact_type)} />
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <a href={artifact.url} target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:underline">
+                      {artifact.title}
+                    </a>
+                    <div class="flex items-center gap-2 mt-1">
+                      <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                        {artifact.artifact_type}
+                      </span>
+                      {#if artifact.date}
+                        <span class="text-xs text-gray-500">{formatDate(artifact.date)}</span>
+                      {/if}
+                    </div>
+                  </div>
+                  <button
+                    onclick={() => handleDeleteArtifact(artifact.artifact_id)}
+                    disabled={deletingArtifactId === artifact.artifact_id}
+                    class="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-600 transition-opacity disabled:opacity-50"
+                    title="Delete"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        {#if showAddArtifact}
+          <div class="px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div class="space-y-3">
+              <div class="flex gap-3">
+                <div class="w-40">
+                  <label for="artifact-type" class="sr-only">Type</label>
+                  <select
+                    id="artifact-type"
+                    bind:value={newArtifactType}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="">Select type</option>
+                    {#each Object.values(ArtifactType) as type}
+                      <option value={type}>{type}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="flex-1">
+                  <label for="artifact-title" class="sr-only">Title</label>
+                  <input
+                    id="artifact-title"
+                    type="text"
+                    placeholder="Title"
+                    bind:value={newArtifactTitle}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <div class="flex-1">
+                  <label for="artifact-url" class="sr-only">URL</label>
+                  <input
+                    id="artifact-url"
+                    type="url"
+                    placeholder="URL"
+                    bind:value={newArtifactUrl}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div class="w-40">
+                  <label for="artifact-date" class="sr-only">Date</label>
+                  <input
+                    id="artifact-date"
+                    type="date"
+                    bind:value={newArtifactDate}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button
+                  onclick={handleCancelArtifact}
+                  class="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded-md"
+                >
+                  Cancel
+                </button>
+                <button
+                  onclick={handleCreateArtifact}
+                  disabled={isCreatingArtifact || !newArtifactTitle.trim() || !newArtifactUrl.trim()}
+                  class="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCreatingArtifact ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div class="px-6 py-3 border-t border-gray-100">
+            <button
+              onclick={() => showAddArtifact = true}
+              class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+            >
+              + Add artifact
             </button>
           </div>
         {/if}

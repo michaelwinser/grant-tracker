@@ -82,7 +82,7 @@ Build the Sheets API wrapper and Svelte stores for data management.
   - [x] `grants` - all grants
   - [x] `actionItems` - all action items
   - [x] `reports` - all reports
-  - [x] `artifacts` - (schema ready, store deferred to Phase 11)
+  - [x] `artifacts` - all artifacts (implemented in Phase 11)
   - [x] `config` - team members, settings
   - [x] `user` - current user info (from Phase 1)
 - [x] Derived stores
@@ -286,19 +286,19 @@ Automatic folder and document creation.
 
 ## Phase 11: Artifacts
 
-**Status: Not Started**
+**Status: Complete**
 
 Link external content to grants.
 
-- [ ] Artifacts list in grant detail
-  - [ ] Display: type, title, URL, date, added by
-  - [ ] Clickable links (open in new tab)
-- [ ] Add artifact form
-  - [ ] Type dropdown (blog post, meeting notes, announcement, etc.)
-  - [ ] Title, URL, date fields
-  - [ ] Auto-populate added_by from current user
-- [ ] Edit artifact
-- [ ] Delete artifact (with confirmation)
+- [x] Artifacts list in grant detail
+  - [x] Display: type, title, URL, date, added by
+  - [x] Clickable links (open in new tab)
+- [x] Add artifact form
+  - [x] Type dropdown (blog post, meeting notes, announcement, etc.)
+  - [x] Title, URL, date fields
+  - [x] Auto-populate added_by from current user
+- [ ] Edit artifact (deferred)
+- [x] Delete artifact (with confirmation)
 
 **Blocked by:** Phase 4
 **Blocks:** Nothing
