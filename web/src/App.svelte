@@ -9,6 +9,7 @@
   import Dashboard from './lib/components/Dashboard.svelte';
   import GrantList from './lib/components/GrantList.svelte';
   import GrantDetail from './lib/components/GrantDetail.svelte';
+  import ActionItemsPage from './lib/components/ActionItemsPage.svelte';
   import { validateSchema } from './lib/api/sheets.js';
 
   let title = 'Grant Tracker';
@@ -209,6 +210,8 @@
           <GrantList />
         {:else if router.route === 'grant-detail'}
           <GrantDetail />
+        {:else if router.route === 'action-items'}
+          <ActionItemsPage />
         {:else}
           <Dashboard />
         {/if}

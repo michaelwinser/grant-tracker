@@ -2,12 +2,21 @@
   import { grantsStore } from '../stores/grants.svelte.js';
   import { actionItemsStore } from '../stores/actionItems.svelte.js';
   import { statusHistoryStore } from '../stores/statusHistory.svelte.js';
+  import { configStore } from '../stores/config.svelte.js';
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
   import { GrantStatus, GRANT_STATUS_ORDER } from '../models.js';
 
   let isUpdatingStatus = $state(false);
   let statusError = $state(null);
+
+  // Action item form state
+  let showAddItem = $state(false);
+  let newItemDescription = $state('');
+  let newItemAssignee = $state('');
+  let newItemDueDate = $state('');
+  let isCreatingItem = $state(false);
+  let itemError = $state(null);
 
   let grant = $derived(() => {
     const grantId = router.params.id;
@@ -16,7 +25,7 @@
 
   let grantActionItems = $derived(() => {
     if (!grant()) return [];
-    return actionItemsStore.itemsByGrant(grant().grant_id);
+    return actionItemsStore.getByGrantId(grant().grant_id);
   });
 
   let openActionItems = $derived(() => {
@@ -26,6 +35,15 @@
   let grantHistory = $derived(() => {
     if (!grant()) return [];
     return statusHistoryStore.getByGrant(grant().grant_id);
+  });
+
+  let teamMembers = $derived(() => {
+    try {
+      const membersStr = configStore.getValue('team_members');
+      return membersStr ? JSON.parse(membersStr) : [];
+    } catch {
+      return [];
+    }
   });
 
   async function handleStatusChange(event) {
@@ -53,6 +71,53 @@
     } finally {
       isUpdatingStatus = false;
     }
+  }
+
+  async function handleToggleItem(item) {
+    itemError = null;
+    try {
+      if (item.status === 'Done') {
+        await actionItemsStore.reopen(item.item_id);
+      } else {
+        await actionItemsStore.markDone(item.item_id);
+      }
+    } catch (err) {
+      itemError = err.message;
+    }
+  }
+
+  async function handleCreateItem() {
+    if (!newItemDescription.trim()) return;
+
+    isCreatingItem = true;
+    itemError = null;
+
+    try {
+      await actionItemsStore.create({
+        grant_id: grant().grant_id,
+        description: newItemDescription.trim(),
+        assignee: newItemAssignee || null,
+        due_date: newItemDueDate || null,
+      });
+
+      // Reset form
+      newItemDescription = '';
+      newItemAssignee = '';
+      newItemDueDate = '';
+      showAddItem = false;
+    } catch (err) {
+      itemError = err.message;
+    } finally {
+      isCreatingItem = false;
+    }
+  }
+
+  function handleCancelAdd() {
+    showAddItem = false;
+    newItemDescription = '';
+    newItemAssignee = '';
+    newItemDueDate = '';
+    itemError = null;
   }
 
   function formatAmount(amount) {
@@ -314,7 +379,12 @@
           <h2 class="text-lg font-semibold text-gray-900">Action Items</h2>
           <span class="text-sm text-gray-500">{openActionItems().length} open</span>
         </div>
-        {#if grantActionItems().length === 0}
+        {#if itemError}
+          <div class="px-6 py-2 bg-red-50 border-b border-red-100">
+            <p class="text-sm text-red-700">{itemError}</p>
+          </div>
+        {/if}
+        {#if grantActionItems().length === 0 && !showAddItem}
           <div class="px-6 py-8 text-center text-gray-500">
             <p>No action items yet.</p>
           </div>
@@ -326,8 +396,8 @@
                   <input
                     type="checkbox"
                     checked={item.status === 'Done'}
-                    disabled
-                    class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600"
+                    onchange={() => handleToggleItem(item)}
+                    class="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
                   />
                   <div class="flex-1 min-w-0">
                     <p class="text-sm {item.status === 'Done' ? 'text-gray-500 line-through' : 'text-gray-900'}">
@@ -351,11 +421,71 @@
             {/each}
           </ul>
         {/if}
-        <div class="px-6 py-3 border-t border-gray-100">
-          <button class="text-sm text-gray-400 cursor-not-allowed" disabled>
-            + Add action item (coming soon)
-          </button>
-        </div>
+
+        {#if showAddItem}
+          <div class="px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <div class="space-y-3">
+              <div>
+                <label for="new-item-desc" class="sr-only">Description</label>
+                <input
+                  id="new-item-desc"
+                  type="text"
+                  placeholder="What needs to be done?"
+                  bind:value={newItemDescription}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+              <div class="flex gap-3">
+                <div class="flex-1">
+                  <label for="new-item-assignee" class="sr-only">Assignee</label>
+                  <select
+                    id="new-item-assignee"
+                    bind:value={newItemAssignee}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="">Unassigned</option>
+                    {#each teamMembers() as member}
+                      <option value={member}>{member}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="flex-1">
+                  <label for="new-item-due" class="sr-only">Due date</label>
+                  <input
+                    id="new-item-due"
+                    type="date"
+                    bind:value={newItemDueDate}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+              <div class="flex justify-end gap-2">
+                <button
+                  onclick={handleCancelAdd}
+                  class="px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-200 rounded-md"
+                >
+                  Cancel
+                </button>
+                <button
+                  onclick={handleCreateItem}
+                  disabled={isCreatingItem || !newItemDescription.trim()}
+                  class="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCreatingItem ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div class="px-6 py-3 border-t border-gray-100">
+            <button
+              onclick={() => showAddItem = true}
+              class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+            >
+              + Add action item
+            </button>
+          </div>
+        {/if}
       </div>
 
       <!-- Notes -->

@@ -177,25 +177,25 @@ Implement grant status tracking with history.
 
 ## Phase 7: Action Items
 
-**Status: Not Started**
+**Status: Complete**
 
 Full action item management.
 
-- [ ] Action items list in grant detail
-  - [ ] Display: description, assignee, due date, status
-  - [ ] Filter: show open only vs all
-  - [ ] Sort by due date
-- [ ] Create action item
-  - [ ] Modal or inline form
-  - [ ] Assignee dropdown (from Config.team_members)
-  - [ ] Due date picker
-  - [ ] Auto-populate source timestamp
-- [ ] Edit action item
-- [ ] Mark complete (update status, set completed_at)
-- [ ] "My Action Items" page (`/action-items`)
-  - [ ] All open items across grants
-  - [ ] Filter by assignee, due date range, grant
-  - [ ] Bulk actions (mark multiple complete)
+- [x] Action items list in grant detail
+  - [x] Display: description, assignee, due date, status
+  - [x] Filter: show open only vs all
+  - [x] Sort by due date
+- [x] Create action item
+  - [x] Inline form in grant detail
+  - [x] Assignee dropdown (from Config.team_members)
+  - [x] Due date picker
+  - [x] Auto-populate source timestamp
+- [ ] Edit action item (deferred)
+- [x] Mark complete (update status, set completed_at)
+- [x] "My Action Items" page (`/action-items`)
+  - [x] All open items across grants
+  - [x] Filter by assignee, due date range, grant
+  - [x] Bulk actions (mark multiple complete)
 
 **Blocked by:** Phase 3
 **Blocks:** Nothing

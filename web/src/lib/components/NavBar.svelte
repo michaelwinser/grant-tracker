@@ -7,6 +7,7 @@
   const navItems = [
     { path: '/', label: 'Dashboard', route: 'dashboard' },
     { path: '/grants', label: 'Grants', route: 'grants' },
+    { path: '/action-items', label: 'Action Items', route: 'action-items' },
   ];
 
   function isActive(route) {

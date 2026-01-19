@@ -52,7 +52,7 @@ export function navigate(path) {
 
 /**
  * Get the current route name.
- * @returns {string} - 'dashboard', 'grants', 'grant-detail', or 'not-found'
+ * @returns {string} - 'dashboard', 'grants', 'grant-detail', 'action-items', or 'not-found'
  */
 export function getRoute() {
   if (currentPath === '/' || currentPath === '') {
@@ -63,6 +63,9 @@ export function getRoute() {
   }
   if (currentPath.startsWith('/grant/')) {
     return 'grant-detail';
+  }
+  if (currentPath === '/action-items') {
+    return 'action-items';
   }
   return 'not-found';
 }
