@@ -2,7 +2,7 @@
 
 This document tracks implementation progress and planned work for Grant Tracker.
 
-**Last updated:** 2025-01-18
+**Last updated:** 2026-01-18
 
 ## Status Legend
 
@@ -29,18 +29,18 @@ This document tracks implementation progress and planned work for Grant Tracker.
 
 ## Phase 1: Authentication
 
-**Status: Not Started**
+**Status: Complete**
 
 Implement Google OAuth flow for team member authentication.
 
-- [ ] Google Identity Services integration
-- [ ] Sign-in/sign-out UI components
-- [ ] Token storage in localStorage
-- [ ] Token refresh logic
-- [ ] Team member allowlist validation (check against Config sheet)
-- [ ] Auth state management (Svelte store)
-- [ ] Protected route handling
-- [ ] Error handling (invalid token, not on allowlist)
+- [x] Google Identity Services integration
+- [x] Sign-in/sign-out UI components
+- [x] Token storage (memory-only for security)
+- [x] Token refresh logic (auto-refresh 5 min before expiry)
+- [x] Team member allowlist validation (check against Config sheet)
+- [x] Auth state management (Svelte 5 runes store)
+- [x] Protected route handling
+- [x] Error handling (invalid token, not on allowlist)
 
 **Blocked by:** Nothing
 **Blocks:** All other phases (need authenticated user for API calls)
