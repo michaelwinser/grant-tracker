@@ -146,36 +146,20 @@ export const SCHEMA = {
 /**
  * Column types for Tables.
  * Maps sheet name -> column name -> column type.
- * Available types: TEXT, NUMERIC, DATE, DROPDOWN, CHECKBOX, SMART_CHIP, PERCENT
+ * Note: Only certain types are supported by the Tables API.
+ * DROPDOWN is handled separately via VALIDATIONS.
+ * Other types (dates, numbers) are inferred by Sheets from the data.
  */
 export const COLUMN_TYPES = {
   Grants: {
+    // Percent columns - explicitly supported
     category_a_pct: 'PERCENT',
     category_b_pct: 'PERCENT',
     category_c_pct: 'PERCENT',
     category_d_pct: 'PERCENT',
-    amount: 'NUMERIC', // Will format as currency in Sheets
-    grant_year: 'NUMERIC',
-    created_at: 'DATE',
-    updated_at: 'DATE',
-    status_changed_at: 'DATE',
+    // Note: amount, grant_year, and date columns will be inferred from data
   },
-  ActionItems: {
-    due_date: 'DATE',
-    created_at: 'DATE',
-    completed_at: 'DATE',
-  },
-  Reports: {
-    due_date: 'DATE',
-    received_date: 'DATE',
-  },
-  Artifacts: {
-    date: 'DATE',
-    created_at: 'DATE',
-  },
-  StatusHistory: {
-    changed_at: 'DATE',
-  },
+  // Other sheets: types inferred from data
 };
 
 /**
