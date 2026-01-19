@@ -330,8 +330,6 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
             type: 'ONE_OF_LIST',
             values: validations[columnName].map((v) => ({ userEnteredValue: v })),
           },
-          showCustomUi: true,
-          strict: false,
         };
       }
 
