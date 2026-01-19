@@ -11,6 +11,8 @@
   let isValidatingStored = $state(false);
   let validationResult = $state(null);
   let showInitializePrompt = $state(false);
+  // Track which spreadsheet ID we've attempted to validate to prevent loops
+  let validationAttemptedFor = $state(null);
 
   // Initialize auth and spreadsheet on mount
   $effect(() => {
@@ -20,24 +22,28 @@
 
   // Validate stored spreadsheet when user authenticates
   $effect(() => {
+    const currentId = spreadsheetStore.spreadsheetId;
     if (
       userStore.isAuthenticated &&
       spreadsheetStore.hasSpreadsheet &&
       !spreadsheetStore.isValidated &&
-      !isValidatingStored
+      !isValidatingStored &&
+      validationAttemptedFor !== currentId
     ) {
       validateStoredSpreadsheet();
     }
   });
 
   async function validateStoredSpreadsheet() {
+    const spreadsheetId = spreadsheetStore.spreadsheetId;
     isValidatingStored = true;
+    validationAttemptedFor = spreadsheetId;
     spreadsheetStore.setLoading(true);
 
     try {
       const result = await validateSchema(
         userStore.accessToken,
-        spreadsheetStore.spreadsheetId
+        spreadsheetId
       );
 
       if (result.valid) {
@@ -65,6 +71,7 @@
     spreadsheetStore.clear();
     validationResult = null;
     showInitializePrompt = false;
+    validationAttemptedFor = null;
   }
 </script>
 

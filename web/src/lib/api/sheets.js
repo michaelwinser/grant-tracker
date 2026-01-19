@@ -6,6 +6,71 @@
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 /**
+ * Custom error class for Sheets API errors with additional context.
+ */
+export class SheetsApiError extends Error {
+  constructor(message, { status, code, isRateLimit = false, isPermissionError = false, isNotFound = false } = {}) {
+    super(message);
+    this.name = 'SheetsApiError';
+    this.status = status;
+    this.code = code;
+    this.isRateLimit = isRateLimit;
+    this.isPermissionError = isPermissionError;
+    this.isNotFound = isNotFound;
+  }
+}
+
+/**
+ * Handle API response errors with user-friendly messages.
+ * @param {Response} response - Fetch response
+ * @param {string} operation - Description of the operation for error messages
+ * @throws {SheetsApiError}
+ */
+async function handleApiError(response, operation) {
+  const errorBody = await response.json().catch(() => ({}));
+  const errorMessage = errorBody.error?.message || '';
+  const errorCode = errorBody.error?.code || response.status;
+
+  // Rate limit errors
+  if (response.status === 429 || errorMessage.includes('Quota exceeded') || errorMessage.includes('Rate Limit')) {
+    throw new SheetsApiError(
+      'Too many requests. Please wait a moment and try again.',
+      { status: response.status, code: errorCode, isRateLimit: true }
+    );
+  }
+
+  // Permission errors
+  if (response.status === 403) {
+    throw new SheetsApiError(
+      'You do not have permission to access this spreadsheet. Please select a spreadsheet you own or have been granted access to.',
+      { status: 403, code: errorCode, isPermissionError: true }
+    );
+  }
+
+  // Not found errors
+  if (response.status === 404) {
+    throw new SheetsApiError(
+      'Spreadsheet not found. It may have been deleted or moved.',
+      { status: 404, code: errorCode, isNotFound: true }
+    );
+  }
+
+  // Authentication errors
+  if (response.status === 401) {
+    throw new SheetsApiError(
+      'Your session has expired. Please sign out and sign back in.',
+      { status: 401, code: errorCode }
+    );
+  }
+
+  // Generic error
+  throw new SheetsApiError(
+    errorMessage || `${operation} failed (${response.status})`,
+    { status: response.status, code: errorCode }
+  );
+}
+
+/**
  * Required sheets and their column headers for Grant Tracker.
  */
 export const SCHEMA = {
@@ -103,14 +168,7 @@ export async function getSpreadsheetMetadata(accessToken, spreadsheetId) {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    if (response.status === 404) {
-      throw new Error('Spreadsheet not found. It may have been deleted or you may not have access.');
-    }
-    if (response.status === 403) {
-      throw new Error('You do not have permission to access this spreadsheet.');
-    }
-    throw new Error(error.error?.message || `Failed to fetch spreadsheet: ${response.status}`);
+    await handleApiError(response, 'Fetch spreadsheet');
   }
 
   return response.json();
@@ -189,8 +247,7 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `Failed to create spreadsheet: ${response.status}`);
+    await handleApiError(response, 'Create spreadsheet');
   }
 
   const data = await response.json();
@@ -259,8 +316,7 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
   });
 
   if (!batchResponse.ok) {
-    const error = await batchResponse.json().catch(() => ({}));
-    throw new Error(error.error?.message || 'Failed to add sheets');
+    await handleApiError(batchResponse, 'Add sheets');
   }
 
   // Add headers to each new sheet

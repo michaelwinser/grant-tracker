@@ -74,6 +74,8 @@
         mode = 'select';
       }
     } catch (err) {
+      // Clear the spreadsheet on error so user can try again
+      spreadsheetStore.clear();
       spreadsheetStore.setError(err.message);
       mode = 'select';
     } finally {
@@ -96,7 +98,10 @@
       validationResult = null;
       mode = 'select';
     } catch (err) {
+      // Clear the spreadsheet on error so user can try again
+      spreadsheetStore.clear();
       spreadsheetStore.setError(err.message);
+      validationResult = null;
       mode = 'select';
     } finally {
       spreadsheetStore.setLoading(false);
