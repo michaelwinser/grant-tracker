@@ -41,6 +41,7 @@
   {#if showMenu}
     <div
       role="menu"
+      tabindex="-1"
       class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
       onkeydown={(e) => { if (e.key === 'Escape') showMenu = false; }}
       onclick={(e) => e.stopPropagation()}

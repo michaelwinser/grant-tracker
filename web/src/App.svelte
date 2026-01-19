@@ -1,6 +1,7 @@
 <script>
   import { userStore } from './lib/stores/user.svelte.js';
   import { spreadsheetStore } from './lib/stores/spreadsheet.svelte.js';
+  import { dataStore, grantsStore, actionItemsStore, reportsStore } from './lib/stores/data.svelte.js';
   import SignInButton from './lib/components/SignInButton.svelte';
   import UserMenu from './lib/components/UserMenu.svelte';
   import SpreadsheetPicker from './lib/components/SpreadsheetPicker.svelte';
@@ -13,6 +14,8 @@
   let showInitializePrompt = $state(false);
   // Track which spreadsheet ID we've attempted to validate to prevent loops
   let validationAttemptedFor = $state(null);
+  // Track which spreadsheet ID we've loaded data for
+  let dataLoadedFor = $state(null);
 
   // Initialize auth and spreadsheet on mount
   $effect(() => {
@@ -31,6 +34,19 @@
       validationAttemptedFor !== currentId
     ) {
       validateStoredSpreadsheet();
+    }
+  });
+
+  // Load data when spreadsheet is validated
+  $effect(() => {
+    const currentId = spreadsheetStore.spreadsheetId;
+    if (
+      userStore.isAuthenticated &&
+      spreadsheetStore.isValidated &&
+      !dataStore.isLoading &&
+      dataLoadedFor !== currentId
+    ) {
+      loadData();
     }
   });
 
@@ -62,16 +78,31 @@
     }
   }
 
+  async function loadData() {
+    const spreadsheetId = spreadsheetStore.spreadsheetId;
+    dataLoadedFor = spreadsheetId;
+
+    try {
+      await dataStore.loadAll();
+    } catch (err) {
+      console.error('Failed to load data:', err);
+      // Don't clear dataLoadedFor - we don't want to retry infinitely on error
+    }
+  }
+
   async function handleTryDifferentAccount() {
     await userStore.signOut();
+    dataStore.clearAll();
     userStore.clearError();
   }
 
   function handleClearStoredSpreadsheet() {
     spreadsheetStore.clear();
+    dataStore.clearAll();
     validationResult = null;
     showInitializePrompt = false;
     validationAttemptedFor = null;
+    dataLoadedFor = null;
   }
 </script>
 
@@ -153,17 +184,64 @@
           </svg>
           <p class="text-gray-600">Validating spreadsheet...</p>
         </div>
-      {:else if spreadsheetStore.isValidated}
-        <!-- Main app content (placeholder for Phase 3+) -->
+      {:else if spreadsheetStore.isValidated && dataStore.isLoading}
+        <!-- Loading data -->
+        <div class="text-center py-12">
+          <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p class="text-gray-600">Loading data...</p>
+        </div>
+      {:else if spreadsheetStore.isValidated && dataStore.anyError}
+        <!-- Data loading error -->
+        <div class="max-w-lg mx-auto">
+          <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <svg class="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3 class="text-lg font-medium text-red-800 mb-2">Failed to Load Data</h3>
+            <p class="text-red-700 mb-4">{dataStore.anyError}</p>
+            <button
+              onclick={() => { dataLoadedFor = null; dataStore.clearAllErrors(); }}
+              class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      {:else if spreadsheetStore.isValidated && dataStore.isLoaded}
+        <!-- Main app content -->
         <div class="bg-white rounded-lg shadow p-6">
-          <p class="text-gray-600">
-            Welcome, {userStore.user?.name || 'User'}! You are signed in as {userStore.user?.email}.
+          <p class="text-gray-600 mb-4">
+            Welcome, {userStore.user?.name || 'User'}!
           </p>
-          <p class="text-gray-500 mt-4">
+
+          <!-- Quick stats -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-blue-50 rounded-lg p-4">
+              <p class="text-sm text-blue-600 font-medium">Total Grants</p>
+              <p class="text-2xl font-bold text-blue-900">{grantsStore.grantCount}</p>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4">
+              <p class="text-sm text-green-600 font-medium">Active Grants</p>
+              <p class="text-2xl font-bold text-green-900">{grantsStore.activeGrants.length}</p>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-4">
+              <p class="text-sm text-yellow-600 font-medium">Open Action Items</p>
+              <p class="text-2xl font-bold text-yellow-900">{actionItemsStore.openItems.length}</p>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4">
+              <p class="text-sm text-red-600 font-medium">Overdue Reports</p>
+              <p class="text-2xl font-bold text-red-900">{reportsStore.overdueReports.length}</p>
+            </div>
+          </div>
+
+          <p class="text-gray-500 text-sm">
             Connected to: <a href={spreadsheetStore.spreadsheetUrl} target="_blank" class="text-blue-600 hover:underline">{spreadsheetStore.spreadsheetName}</a>
           </p>
           <p class="text-gray-400 mt-2 text-sm">
-            The core data layer and views will be implemented in Phase 3.
+            Full views and interactions will be implemented in Phase 4+.
           </p>
         </div>
       {:else}

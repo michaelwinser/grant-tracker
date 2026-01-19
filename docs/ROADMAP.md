@@ -2,7 +2,7 @@
 
 This document tracks implementation progress and planned work for Grant Tracker.
 
-**Last updated:** 2026-01-18
+**Last updated:** 2026-01-19
 
 ## Status Legend
 
@@ -68,29 +68,29 @@ Allow users to select or create their spreadsheet via Google Picker.
 
 ## Phase 3: Core Data Layer
 
-**Status: Not Started**
+**Status: Complete**
 
 Build the Sheets API wrapper and Svelte stores for data management.
 
-- [ ] Sheets API client wrapper
-  - [ ] Generic read/write operations
-  - [ ] Pagination support
-  - [ ] Error handling with exponential backoff
-  - [ ] Rate limit handling
-- [ ] Data models/types (Grant, ActionItem, Report, Artifact)
-- [ ] Svelte stores
-  - [ ] `grants` - all grants
-  - [ ] `actionItems` - all action items
-  - [ ] `reports` - all reports
-  - [ ] `artifacts` - all artifacts
-  - [ ] `config` - team members, settings
-  - [ ] `user` - current user info
-- [ ] Derived stores
-  - [ ] `grantsByStatus` - grouped by pipeline stage
-  - [ ] `myActionItems` - filtered to current user
-  - [ ] `overdueReports` - reports past due date
-- [ ] CRUD operations for each entity
-- [ ] Optimistic updates with rollback on failure
+- [x] Sheets API client wrapper
+  - [x] Generic read/write operations
+  - [x] Pagination support (via full sheet read)
+  - [x] Error handling with exponential backoff
+  - [x] Rate limit handling
+- [x] Data models/types (Grant, ActionItem, Report, Artifact)
+- [x] Svelte stores
+  - [x] `grants` - all grants
+  - [x] `actionItems` - all action items
+  - [x] `reports` - all reports
+  - [x] `artifacts` - (schema ready, store deferred to Phase 11)
+  - [x] `config` - team members, settings
+  - [x] `user` - current user info (from Phase 1)
+- [x] Derived stores
+  - [x] `grantsByStatus` - grouped by pipeline stage
+  - [x] `myActionItems` - filtered to current user
+  - [x] `overdueReports` - reports past due date
+- [x] CRUD operations for each entity
+- [x] Optimistic updates with rollback on failure
 
 **Blocked by:** Phase 2 (need spreadsheet ID)
 **Blocks:** Phases 4-10 (all views need data)
