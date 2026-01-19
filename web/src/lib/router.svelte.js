@@ -67,6 +67,9 @@ export function getRoute() {
   if (currentPath === '/action-items') {
     return 'action-items';
   }
+  if (currentPath === '/reports') {
+    return 'reports';
+  }
   return 'not-found';
 }
 

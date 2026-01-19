@@ -204,28 +204,29 @@ Full action item management.
 
 ## Phase 8: Report Compliance
 
-**Status: Not Started**
+**Status: Complete**
 
 Track report submissions and compliance.
 
-- [ ] Reports view (`/reports`)
-  - [ ] List all expected reports
-  - [ ] Group by grant or by period
-- [ ] Report status display
-  - [ ] Expected, Received, Overdue badges
-  - [ ] Color-coded indicators
-- [ ] "Mark Received" action
-  - [ ] Modal to enter received date and optional URL
-  - [ ] Update Reports sheet
-- [ ] Filters
-  - [ ] By period (month, quarter, year)
-  - [ ] By status (expected, received, overdue)
-  - [ ] By grant
-- [ ] Overdue highlighting
-- [ ] Export/summary view for compliance reporting
+- [x] Reports view (`/reports`)
+  - [x] List all expected reports
+  - [x] Filter/group by grant or by period
+- [x] Report status display
+  - [x] Expected, Received, Overdue badges
+  - [x] Color-coded indicators
+- [x] "Mark Received" action
+  - [x] Modal to enter received date and optional URL
+  - [x] Update Reports sheet
+- [x] Filters
+  - [x] By period
+  - [x] By status (expected, received, overdue)
+  - [x] By grant
+  - [x] By report type
+- [x] Overdue highlighting
+- [ ] Export/summary view for compliance reporting (deferred)
 
 **Blocked by:** Phase 3
-**Blocks:** Phase 11 (GitHub Action updates same data)
+**Blocks:** Phase 12 (GitHub Action updates same data)
 
 ---
 

@@ -8,6 +8,7 @@
     { path: '/', label: 'Dashboard', route: 'dashboard' },
     { path: '/grants', label: 'Grants', route: 'grants' },
     { path: '/action-items', label: 'Action Items', route: 'action-items' },
+    { path: '/reports', label: 'Reports', route: 'reports' },
   ];
 
   function isActive(route) {
