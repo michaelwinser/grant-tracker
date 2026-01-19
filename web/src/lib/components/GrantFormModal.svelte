@@ -50,6 +50,7 @@
 
   let isGrantIdUnique = $derived(() => {
     if (isEditing) return true; // Don't check uniqueness when editing
+    if (isSubmitting) return true; // Don't recheck during submission (optimistic update adds it)
     if (!grantId.trim()) return true; // Empty is handled by required validation
     return !grantsStore.grants.some(g => g.grant_id === grantId.trim());
   });
