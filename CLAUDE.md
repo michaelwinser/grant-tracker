@@ -128,6 +128,8 @@ When permissions are granted in `.claude/settings.json`, use them without asking
 - If file edits are allowed, make the edits directly
 - Reserve questions for actual ambiguity about *what* to do, not *whether* to use permitted tools
 
+**Avoid chaining commands with `&&`** when permissions use patterns like `Bash(git *)`. Chained commands may not match the pattern correctly. Run them as separate tool calls instead.
+
 This keeps the workflow efficient and avoids unnecessary back-and-forth.
 
 ## Design Decisions
