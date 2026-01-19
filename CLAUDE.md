@@ -12,8 +12,10 @@ A lightweight grant management PWA for a small non-profit organization. Uses Goo
 
 ## Documentation
 
+- `docs/ROADMAP.md` — **Implementation roadmap and progress tracking** (keep this up-to-date!)
 - `docs/PRD.md` — Product requirements, user personas, functional requirements
 - `docs/DESIGN.md` — Technical architecture, data model, API patterns, implementation guidance
+- `docs/SETUP.md` — Setup guide for new developers
 - `mockups/` — Interactive HTML mockups (open in browser to explore)
 
 ## Tech Stack
@@ -98,12 +100,31 @@ See `docs/DESIGN.md` for full schema.
 
 ## For Development
 
-1. Review `docs/PRD.md` for requirements
-2. Review `docs/DESIGN.md` for technical details
-3. Open `mockups/index.html` in browser to see the UI direction
+1. **Check `docs/ROADMAP.md` first** — See what's done, what's in progress, and what to work on next
+2. Review `docs/PRD.md` for requirements
+3. Review `docs/DESIGN.md` for technical details
+4. Open `mockups/index.html` in browser to see the UI direction
 
-## Open Questions (Deferred)
+## Keeping the Roadmap Updated
 
-- Action items storage: Sheet vs Internal Notes doc (start with Sheet)
-- Google Docs add-on: Nice to have, not v1
-- GitHub Action for report tracking: Phase 2
+**IMPORTANT:** The roadmap (`docs/ROADMAP.md`) is the source of truth for project progress. Keep it current:
+
+- Mark items `[x]` when complete
+- Mark items `[~]` when in progress
+- Add new items as requirements emerge
+- Update the "Last updated" date when making changes
+
+When starting work on a feature:
+1. Check the roadmap for dependencies (what must be done first)
+2. Mark the items you're working on as in-progress
+3. When done, mark items complete and update any affected sections
+
+This helps maintain continuity across sessions and keeps everyone aligned on project status.
+
+## Design Decisions
+
+- **Action items**: Stored in Sheet (not Internal Notes doc) for queryability
+- **OAuth scopes**: Using `drive.file` (not `spreadsheets`) for least-privilege access
+- **Spreadsheet selection**: Users select via Picker or create new (not hardcoded in env)
+- **Google Docs add-on**: Deferred to post-v1
+- **GitHub Action for reports**: Planned for Phase 12

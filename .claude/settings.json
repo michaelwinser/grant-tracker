@@ -13,6 +13,7 @@
       "Bash(pwd)",
       "Bash(curl *)",
       "Bash(sleep *)",
+      "Bash(wc *)",
       "Edit(./**)",
       "Write(./**)",
       "Read(./**)"
