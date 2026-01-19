@@ -49,17 +49,17 @@ Implement Google OAuth flow for team member authentication.
 
 ## Phase 2: Spreadsheet Selection
 
-**Status: Not Started**
+**Status: Complete**
 
 Allow users to select or create their spreadsheet via Google Picker.
 
-- [ ] Google Picker API integration
-- [ ] "Select Spreadsheet" UI flow on first use
-- [ ] "Create New Spreadsheet" option
-- [ ] Sheet schema initialization (create tabs with headers)
-- [ ] Spreadsheet ID storage in localStorage
-- [ ] Switch spreadsheet functionality
-- [ ] Validate selected sheet has correct schema
+- [x] Google Picker API integration
+- [x] "Select Spreadsheet" UI flow on first use
+- [x] "Create New Spreadsheet" option
+- [x] Sheet schema initialization (create tabs with headers)
+- [x] Spreadsheet ID storage in localStorage
+- [x] Switch spreadsheet functionality
+- [x] Validate selected sheet has correct schema
 
 **Blocked by:** Phase 1 (need OAuth token for Picker/Sheets API)
 **Blocks:** Phase 3 (need spreadsheet to fetch data)
