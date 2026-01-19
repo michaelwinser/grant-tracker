@@ -124,11 +124,14 @@ This helps maintain continuity across sessions and keeps everyone aligned on pro
 ## Working Efficiently
 
 When permissions are granted in `.claude/settings.json`, use them without asking for confirmation. For example:
-- If `Bash(git *)` is allowed, just commit when work is complete—don't ask "would you like me to commit?"
+- If `Bash(./gt *)` is allowed, just commit when work is complete—don't ask "would you like me to commit?"
 - If file edits are allowed, make the edits directly
 - Reserve questions for actual ambiguity about *what* to do, not *whether* to use permitted tools
 
-**Avoid chaining commands with `&&`** when permissions use patterns like `Bash(git *)`. Chained commands may not match the pattern correctly. Run them as separate tool calls instead.
+**For git commits, use `./gt commit`** instead of `git commit` directly. This wrapper:
+- Automatically appends the Co-Authored-By trailer
+- Matches the `Bash(./gt *)` permission pattern reliably
+- Example: `./gt commit "Add new feature" src/` (stages files and commits)
 
 This keeps the workflow efficient and avoids unnecessary back-and-forth.
 

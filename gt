@@ -16,6 +16,8 @@ usage() {
     echo "  logs        Show container logs"
     echo "  status      Show container status"
     echo ""
+    echo "  commit <msg> [files...]  Git commit with Co-Authored-By trailer"
+    echo ""
     echo "  gcp setup   Create GCP project and enable APIs"
     echo "  gcp oauth   Configure OAuth credentials"
     echo "  gcp auth    Authenticate with Google Cloud"
@@ -24,6 +26,7 @@ usage() {
     echo "  ./gt build"
     echo "  ./gt start"
     echo "  ./gt run npm run build"
+    echo "  ./gt commit \"Add new feature\" src/"
     echo "  ./gt gcp setup"
 }
 
@@ -108,6 +111,33 @@ status() {
         docker ps -f name="$CONTAINER_NAME" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
     else
         echo "Container is not running"
+    fi
+}
+
+# Git commit with automatic Co-Authored-By trailer
+# Usage: ./gt commit "message" [files...]
+commit() {
+    if [ $# -eq 0 ]; then
+        echo "Error: No commit message specified"
+        echo "Usage: ./gt commit \"message\" [files...]"
+        exit 1
+    fi
+
+    local message="$1"
+    shift
+
+    # If additional args provided, stage those files
+    if [ $# -gt 0 ]; then
+        git add "$@"
+    fi
+
+    # Check if there are staged changes
+    if ! git diff --cached --quiet; then
+        git commit -m "$message" -m "Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+    else
+        echo "No staged changes to commit."
+        echo "Either stage files first with 'git add' or specify files: ./gt commit \"message\" file1 file2"
+        exit 1
     fi
 }
 
@@ -201,6 +231,10 @@ case "${1:-}" in
         ;;
     status)
         status
+        ;;
+    commit)
+        shift
+        commit "$@"
         ;;
     gcp)
         shift
