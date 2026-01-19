@@ -70,6 +70,9 @@ export function getRoute() {
   if (currentPath === '/reports') {
     return 'reports';
   }
+  if (currentPath === '/budget') {
+    return 'budget';
+  }
   return 'not-found';
 }
 

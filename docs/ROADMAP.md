@@ -232,23 +232,23 @@ Track report submissions and compliance.
 
 ## Phase 9: Budget & Charts
 
-**Status: Not Started**
+**Status: Complete**
 
 Budget allocation visualization.
 
-- [ ] Budget calculations
-  - [ ] Sum grant amounts by category (using percentage allocations)
-  - [ ] Handle grants with split categories
-  - [ ] Filter by grant year
-- [ ] Chart.js integration
-  - [ ] Pie chart: allocation by category
-  - [ ] Bar chart: category breakdown by year
-- [ ] Budget table
-  - [ ] Grant-by-grant breakdown
-  - [ ] Category columns with calculated amounts
-  - [ ] Totals row
-- [ ] Year selector
-- [ ] Year-over-year comparison (optional)
+- [x] Budget calculations
+  - [x] Sum grant amounts by category (using percentage allocations)
+  - [x] Handle grants with split categories
+  - [x] Filter by grant year
+- [x] Chart.js integration
+  - [x] Pie chart: allocation by category
+  - [x] Bar chart: category breakdown by year (stacked)
+- [x] Budget table
+  - [x] Grant-by-grant breakdown
+  - [x] Category columns with calculated amounts
+  - [x] Totals row
+- [x] Year selector
+- [x] Year-over-year comparison (via stacked bar chart)
 
 **Blocked by:** Phase 3
 **Blocks:** Nothing
