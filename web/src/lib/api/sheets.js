@@ -146,6 +146,8 @@ export const SCHEMA = {
 /**
  * Column types for Tables.
  * Maps sheet name -> column name -> column type.
+ * Confirmed working: PERCENT, DROPDOWN
+ * TODO: Research correct syntax for NUMBER/DATE types in addTable batchUpdate API
  * DROPDOWN is handled separately via VALIDATIONS.
  */
 export const COLUMN_TYPES = {
@@ -154,27 +156,6 @@ export const COLUMN_TYPES = {
     category_b_pct: 'PERCENT',
     category_c_pct: 'PERCENT',
     category_d_pct: 'PERCENT',
-    amount: 'NUMBER',
-    grant_year: 'NUMBER',
-    created_at: 'DATE',
-    updated_at: 'DATE',
-    status_changed_at: 'DATE',
-  },
-  ActionItems: {
-    due_date: 'DATE',
-    created_at: 'DATE',
-    completed_at: 'DATE',
-  },
-  Reports: {
-    due_date: 'DATE',
-    received_date: 'DATE',
-  },
-  Artifacts: {
-    date: 'DATE',
-    created_at: 'DATE',
-  },
-  StatusHistory: {
-    changed_at: 'DATE',
   },
 };
 
