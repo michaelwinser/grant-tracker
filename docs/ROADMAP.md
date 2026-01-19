@@ -2,7 +2,7 @@
 
 This document tracks implementation progress and planned work for Grant Tracker.
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-01-19 (v2 phases added)
 
 ## Status Legend
 
@@ -204,7 +204,7 @@ Full action item management.
 
 ## Phase 8: Report Compliance
 
-**Status: Complete**
+**Status: Complete (pending migration)**
 
 Track report submissions and compliance.
 
@@ -225,8 +225,10 @@ Track report submissions and compliance.
 - [x] Overdue highlighting
 - [ ] Export/summary view for compliance reporting (deferred)
 
+**Note:** This phase will be migrated in Phase 17. Reports will become files in each grant's Reports/ subfolder rather than rows in a Reports sheet. The UI will be updated to read from Drive instead.
+
 **Blocked by:** Phase 3
-**Blocks:** Phase 12 (GitHub Action updates same data)
+**Blocks:** Nothing (Phase 12 superseded)
 
 ---
 
@@ -255,32 +257,13 @@ Budget allocation visualization.
 
 ---
 
-## Phase 10: Drive Integration
+## Phase 10: Drive Integration (Legacy)
 
-**Status: Not Started**
+**Status: Superseded by Phase 17**
 
-Automatic folder and document creation.
+_This phase has been superseded by the new folder-first architecture in Phase 17. The original design called for a year-based folder hierarchy; the new design uses a flat Grants/ folder with per-grant subfolders._
 
-- [ ] Drive API wrapper
-  - [ ] Create folder
-  - [ ] Copy file (from template)
-  - [ ] Set sharing permissions
-- [ ] Folder structure creation
-  - [ ] Get/create year folder under Grants root
-  - [ ] Create grant folder (`{grant_id}`)
-  - [ ] Create Supporting Materials subfolder
-- [ ] Document creation
-  - [ ] Copy Proposal Template, rename
-  - [ ] Copy Internal Notes Template, rename
-  - [ ] Set appropriate sharing (proposal shared with grantee email)
-- [ ] Trigger options
-  - [ ] Auto-create on grant creation
-  - [ ] Manual "Create Folder" button in grant detail
-- [ ] Update grant record with folder/doc URLs
-- [ ] Handle existing folders gracefully
-
-**Blocked by:** Phase 4 (need grant detail view)
-**Blocks:** Nothing
+---
 
 ---
 
@@ -305,30 +288,13 @@ Link external content to grants.
 
 ---
 
-## Phase 12: GitHub Integration
+## Phase 12: GitHub Integration (Legacy)
 
-**Status: Not Started**
+**Status: Superseded**
 
-GitHub Action to auto-track report submissions.
+_This phase has been superseded by the new folder-first architecture. Reports are now tracked as files in each grant's Reports/ subfolder in Google Drive, eliminating the need for a separate Reports sheet and GitHub Action integration._
 
-- [ ] GitHub Action workflow
-  - [ ] Trigger on push to `reports/` directory
-  - [ ] Detect new monthly reports (YYYY-MM pattern)
-  - [ ] Use service account to update Sheets
-- [ ] Service account setup
-  - [ ] Create GCP service account
-  - [ ] Grant Sheets editor permission
-  - [ ] Document secret configuration
-- [ ] Sheets update logic
-  - [ ] Find matching report record
-  - [ ] Update status to "Received"
-  - [ ] Set received_date and commit URL
-- [ ] Documentation
-  - [ ] Setup guide for grantee repos
-  - [ ] Repository naming conventions
-
-**Blocked by:** Phase 8 (Reports schema must be defined)
-**Blocks:** Nothing
+---
 
 ---
 
@@ -392,45 +358,196 @@ Server-side validation in Google Sheets.
 
 ---
 
-## Future Considerations (Post-v1)
+## Phase 15: Foundation Improvements
 
-These items are explicitly out of scope for v1 but may be considered later:
+**Status: Not Started**
+
+Auth enhancements and workflow streamlining.
+
+- [ ] Auth credential caching
+  - [ ] Persist OAuth tokens in sessionStorage
+  - [ ] Auto-restore session on page reload
+  - [ ] Clear on explicit sign-out
+- [ ] Root folder setup
+  - [ ] Folder picker for selecting/creating root folder
+  - [ ] Store root folder ID alongside spreadsheet ID
+  - [ ] Create Grants/ subfolder structure
+- [ ] Simplified grant creation
+  - [ ] Minimal "quick create" form (org, title, year, type)
+  - [ ] Auto-generate grant ID
+  - [ ] Auto-create folder and docs on save
+  - [ ] Full edit available after creation
+
+**Blocked by:** Phase 1 (auth), Phase 2 (picker)
+**Blocks:** Phase 16
+
+---
+
+## Phase 16: Drive Folder Architecture
+
+**Status: Not Started**
+
+New folder-first architecture with Drive as source of truth for files.
+
+**Folder Structure:**
+```
+[Root Folder]
+├── Grant-Tracker-Database (spreadsheet)
+└── Grants/
+    └── [GRANT-ID]/
+        ├── GRANT-ID-Tracker (doc with metadata, approvals)
+        ├── GRANT-ID-Proposal (doc, shared with grantee)
+        ├── [other files] → shown as Attachments
+        └── Reports/
+            └── [files] → shown as Reports (grantee-writable)
+```
+
+- [ ] Drive API integration
+  - [ ] Create folder with specific parent
+  - [ ] Create Google Doc from scratch (no template needed)
+  - [ ] List files in folder
+  - [ ] Set sharing permissions
+- [ ] Auto-create on grant creation
+  - [ ] Create grant folder under Grants/
+  - [ ] Create Tracker doc with metadata table structure
+  - [ ] Create Proposal doc (blank)
+  - [ ] Create Reports/ subfolder
+  - [ ] Update grant record with folder/doc URLs
+- [ ] Attachments view in grant detail
+  - [ ] List all files in grant folder (excluding Tracker, Proposal, Reports/)
+  - [ ] Show file name, type icon, modified date
+  - [ ] Click to open in Drive
+- [ ] Reports from folder
+  - [ ] List files in Reports/ subfolder
+  - [ ] Show file name, date (from filename or modified date)
+  - [ ] Remove Reports sheet dependency
+  - [ ] Update /reports page to aggregate from Drive
+- [ ] Handle existing grants
+  - [ ] "Create Folder" button for grants without folders
+  - [ ] Gracefully handle partial folder structures
+
+**Blocked by:** Phase 15 (root folder setup)
+**Blocks:** Phase 17
+
+---
+
+## Phase 17: Google Docs Integration
+
+**Status: Not Started**
+
+Sync data between app and Google Docs for distributed source of truth.
+
+- [ ] Tracker doc structure
+  - [ ] Define metadata table format (key-value pairs)
+  - [ ] Define approvals table format (date, type, approver, notes)
+  - [ ] Create doc with proper headings and tables on grant creation
+- [ ] Metadata sync
+  - [ ] Read metadata table from Tracker doc
+  - [ ] Display in grant detail (read-only initially)
+  - [ ] Future: two-way sync
+- [ ] Approvals section
+  - [ ] Read approvals table from Tracker doc
+  - [ ] Display approval history in grant detail
+  - [ ] Future: add approval from app
+- [ ] Action items from comments
+  - [ ] Use Drive API to fetch comments on Tracker/Proposal docs
+  - [ ] Parse comments for action item patterns (e.g., "TODO:", "@assignee")
+  - [ ] Show in action items list with source link
+  - [ ] Mark as synced vs. manual
+- [ ] Periodic sync
+  - [ ] Refresh on grant detail load
+  - [ ] Manual "Sync" button
+  - [ ] Future: background polling
+
+**Blocked by:** Phase 16 (Tracker doc creation)
+**Blocks:** Nothing
+
+---
+
+## Phase 18: Advanced Features
+
+**Status: Not Started**
+
+Polish and advanced workflows.
+
+- [ ] Permissions management
+  - [ ] Set Proposal doc sharing (grantee can edit)
+  - [ ] Set Reports/ folder sharing (grantee can add files)
+  - [ ] Permissions summary in grant detail
+- [ ] "Create from existing doc" flow
+  - [ ] Detect grant folders without spreadsheet entries
+  - [ ] Parse Tracker doc metadata to populate grant fields
+  - [ ] Create grant record from doc
+- [ ] Organization patterns
+  - [ ] Auto-complete from previous grants
+  - [ ] Suggested org codes based on history
+  - [ ] People API integration for contact lookup (optional)
+- [ ] Multiple contacts per grant
+  - [ ] Store as comma-separated emails in single field
+  - [ ] Display as list in UI
+  - [ ] Auto-complete from contacts
+- [ ] Global action items improvements
+  - [ ] Filter view instead of separate page
+  - [ ] Include synced items from Docs
+  - [ ] Group by grant or by assignee
+
+**Blocked by:** Phase 17
+**Blocks:** Nothing
+
+---
+
+## Future Considerations (Post-v2)
+
+These items are explicitly out of scope for v2 but may be considered later:
 
 - [ ] Automated email notifications (approval/rejection)
-- [ ] Grantee-facing portal
-- [ ] Google Docs add-on/sidebar
+- [ ] Grantee-facing portal (read-only view of their grants)
+- [ ] Google Docs add-on/sidebar (edit grants from within Docs)
 - [ ] Calendar integration for due dates
-- [ ] Mobile-optimized experience
+- [ ] Mobile-optimized experience (PWA with offline support)
 - [ ] Advanced reporting and analytics
 - [ ] Bulk import/export functionality
 - [ ] Multi-organization support
+- [ ] Slack/Teams integration for notifications
+- [ ] AI-assisted grant writing (integration with Claude API)
 
 ---
 
 ## Implementation Notes
 
-### Critical Path
+### V1 Critical Path (Complete)
 
-The following sequence represents the minimum path to a working application:
+The v1 application provides a working grant management system:
 
-1. **Phase 1: Authentication** — Everything requires an authenticated user
-2. **Phase 2: Spreadsheet Selection** — Need a spreadsheet to read/write
-3. **Phase 3: Core Data Layer** — All views depend on data access
-4. **Phase 4: Grant Registry** — Core value proposition
-5. **Phase 5: Dashboard** — Primary entry point for users
+1. **Phase 1: Authentication** — Google OAuth for team members
+2. **Phase 2: Spreadsheet Selection** — Picker-based spreadsheet selection
+3. **Phase 3: Core Data Layer** — Sheets API wrapper and Svelte stores
+4. **Phase 4: Grant Registry** — Grant list and detail views
+5. **Phase 5: Dashboard** — Pipeline summary and widgets
+
+### V2 Critical Path (In Progress)
+
+The v2 evolution adds Drive integration for a distributed source of truth:
+
+1. **Phase 15: Foundation** — Auth caching, root folder setup
+2. **Phase 16: Drive Folder Architecture** — Auto-create folders/docs, files as attachments/reports
+3. **Phase 17: Google Docs Integration** — Sync metadata, action items, approvals from Tracker docs
+4. **Phase 18: Advanced Features** — Permissions, "create from doc", org patterns
 
 ### Parallelization
 
-Once Phase 3 is complete, the following can be developed in parallel:
-- Phases 4-9 (different views, same data layer)
-- Phase 14 (Apps Script is independent)
+- Phase 13 (Polish) can be done alongside any other work
+- Phase 14 (Apps Script) is independent and can be done anytime
+- Phases 15-18 must be done sequentially (each depends on the previous)
 
 ### Key Design Principles
 
 - **Walkaway-able**: If the PWA breaks, Sheets and Drive remain fully usable
 - **No backend**: All API calls from browser using user's OAuth token
 - **Least privilege**: Use `drive.file` scope, not full Drive access
-- **Google-native**: Leverage Sheets Tables, Drive structure, Docs templates
+- **Distributed source of truth**: Spreadsheet for data, Docs for discussions/approvals, Drive for files
+- **Google-native**: Leverage Sheets Tables, Drive structure, Docs comments
+- **App as aggregator**: The PWA aggregates and displays data from multiple Google sources
 
 ---
 
