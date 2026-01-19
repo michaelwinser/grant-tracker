@@ -1,6 +1,9 @@
 /**
  * User authentication state store using Svelte 5 runes.
  * Manages user session, tokens, and team member validation.
+ *
+ * Credentials are cached in sessionStorage for persistence across page refreshes.
+ * On page load, attempts silent token refresh to restore session.
  */
 
 import {
@@ -10,7 +13,11 @@ import {
   getUserInfo,
   scheduleTokenRefresh,
   cancelTokenRefresh,
+  refreshToken,
 } from '../api/auth.js';
+
+// Storage key for cached session
+const SESSION_CACHE_KEY = 'grant_tracker_session';
 
 // Reactive state
 let user = $state(null);
@@ -25,8 +32,49 @@ const isAuthenticated = $derived(user !== null && accessToken !== null);
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 /**
+ * Save session to sessionStorage.
+ */
+function cacheSession(userInfo, token) {
+  try {
+    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+      user: userInfo,
+      timestamp: Date.now(),
+    }));
+  } catch (e) {
+    // sessionStorage might be unavailable (private browsing, etc.)
+    console.warn('Could not cache session:', e);
+  }
+}
+
+/**
+ * Load cached session from sessionStorage.
+ */
+function loadCachedSession() {
+  try {
+    const cached = sessionStorage.getItem(SESSION_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    console.warn('Could not load cached session:', e);
+  }
+  return null;
+}
+
+/**
+ * Clear cached session from sessionStorage.
+ */
+function clearCachedSession() {
+  try {
+    sessionStorage.removeItem(SESSION_CACHE_KEY);
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+/**
  * Initialize the auth system.
- * Loads GSI library but does not attempt auto-login (memory-only tokens).
+ * Loads GSI library and attempts to restore cached session.
  */
 async function initialize() {
   isLoading = true;
@@ -37,6 +85,30 @@ async function initialize() {
       throw new Error('Missing VITE_GOOGLE_CLIENT_ID in environment');
     }
     await initializeGoogleAuth(clientId);
+
+    // Try to restore cached session
+    const cached = loadCachedSession();
+    if (cached?.user) {
+      // Attempt silent token refresh
+      try {
+        const tokenData = await refreshToken();
+        accessToken = tokenData.access_token;
+        user = cached.user;
+
+        // Schedule automatic refresh
+        scheduleTokenRefresh(
+          tokenData.expires_in,
+          handleTokenRefresh,
+          handleTokenRefreshError
+        );
+
+        console.log('Session restored for:', user.email);
+      } catch (refreshErr) {
+        // Silent refresh failed - user needs to sign in again
+        console.log('Could not restore session, sign-in required');
+        clearCachedSession();
+      }
+    }
   } catch (err) {
     error = err.message;
   } finally {
@@ -46,7 +118,7 @@ async function initialize() {
 
 /**
  * Sign in with Google.
- * Fetches user info and optionally validates against team allowlist.
+ * Fetches user info and caches session for persistence.
  */
 async function signIn() {
   isLoading = true;
@@ -59,6 +131,9 @@ async function signIn() {
     // Fetch user profile
     const userInfo = await getUserInfo(accessToken);
     user = userInfo;
+
+    // Cache session for page refresh persistence
+    cacheSession(userInfo, accessToken);
 
     // Schedule automatic token refresh
     scheduleTokenRefresh(
@@ -86,6 +161,7 @@ async function signOut() {
     await authSignOut(accessToken);
   } finally {
     cancelTokenRefresh();
+    clearCachedSession();
     user = null;
     accessToken = null;
     error = null;
