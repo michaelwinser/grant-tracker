@@ -3,12 +3,16 @@
     "allow": [
       "Bash(docker *)",
       "Bash(git *)",
+      "Bash(gh *)",
       "Bash(mkdir *)",
       "Bash(rm *)",
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(ls *)",
+      "Bash(./gt *)",
       "Bash(pwd)",
+      "Bash(curl *)",
+      "Bash(sleep *)",
       "Edit(./**)",
       "Write(./**)",
       "Read(./**)"

@@ -1,8 +1,8 @@
 # Dependencies
-node_modules/
+web/node_modules/
 
 # Build output
-dist/
+web/dist/
 
 # Environment files
 .env
@@ -24,3 +24,9 @@ npm-debug.log*
 
 # Cache
 .cache/
+
+# GCP configuration (contains project-specific values)
+scripts/gcp-config.env
+
+# GCP credentials (local gcloud config)
+.gcloud/

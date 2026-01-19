@@ -12,8 +12,8 @@ A lightweight grant management PWA for a small non-profit organization. Uses Goo
 
 ## Documentation
 
-- `PRD.md` — Product requirements, user personas, functional requirements
-- `DESIGN.md` — Technical architecture, data model, API patterns, implementation guidance
+- `docs/PRD.md` — Product requirements, user personas, functional requirements
+- `docs/DESIGN.md` — Technical architecture, data model, API patterns, implementation guidance
 - `mockups/` — Interactive HTML mockups (open in browser to explore)
 
 ## Tech Stack
@@ -64,7 +64,7 @@ A lightweight grant management PWA for a small non-profit organization. Uses Goo
 
 **Config** — Team members, folder IDs, settings
 
-See `DESIGN.md` for full schema.
+See `docs/DESIGN.md` for full schema.
 
 ## Key Features (Priority Order)
 
@@ -86,14 +86,21 @@ See `DESIGN.md` for full schema.
 
 ## Getting Started
 
-1. Review `PRD.md` for requirements
-2. Review `DESIGN.md` for technical details
+**First-time setup:** Run `/setup` to start the interactive setup guide. This walks through:
+- GCP project creation and API enablement
+- OAuth consent screen and client configuration
+- Google Sheets setup
+- Dev environment verification
+
+**Manual setup:** See `docs/SETUP.md` for step-by-step instructions.
+
+**Already set up?** Start the dev server with `./gt start`.
+
+## For Development
+
+1. Review `docs/PRD.md` for requirements
+2. Review `docs/DESIGN.md` for technical details
 3. Open `mockups/index.html` in browser to see the UI direction
-4. Start with:
-   - Project setup (Svelte + Vite + Tailwind)
-   - Google OAuth integration
-   - Sheets API connection
-   - Basic grant list view
 
 ## Open Questions (Deferred)
 

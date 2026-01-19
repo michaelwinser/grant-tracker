@@ -16,11 +16,15 @@ usage() {
     echo "  logs        Show container logs"
     echo "  status      Show container status"
     echo ""
+    echo "  gcp setup   Create GCP project and enable APIs"
+    echo "  gcp oauth   Configure OAuth credentials"
+    echo "  gcp auth    Authenticate with Google Cloud"
+    echo ""
     echo "Examples:"
     echo "  ./gt build"
     echo "  ./gt start"
     echo "  ./gt run npm run build"
-    echo "  ./gt shell"
+    echo "  ./gt gcp setup"
 }
 
 build() {
@@ -38,7 +42,12 @@ start() {
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
     echo "Starting dev server on http://localhost:5173"
-    docker run --rm -it \
+    # Use -it only if we have a TTY
+    local tty_flags=""
+    if [ -t 0 ]; then
+        tty_flags="-it"
+    fi
+    docker run --rm $tty_flags \
         --name "$CONTAINER_NAME" \
         -p 5173:5173 \
         -v "$(pwd)":/workspace \
@@ -60,15 +69,27 @@ run_cmd() {
         echo "Usage: ./gt run <command>"
         exit 1
     fi
-    docker run --rm -it \
+    # Use -it only if we have a TTY
+    local tty_flags=""
+    if [ -t 0 ]; then
+        tty_flags="-it"
+    fi
+    docker run --rm $tty_flags \
         -v "$(pwd)":/workspace \
         "$IMAGE_NAME" \
         "$@"
 }
 
 shell() {
-    docker run --rm -it \
+    # Use -it only if we have a TTY
+    # Starts at /workspace (project root) for access to all directories
+    local tty_flags=""
+    if [ -t 0 ]; then
+        tty_flags="-it"
+    fi
+    docker run --rm $tty_flags \
         -v "$(pwd)":/workspace \
+        -w /workspace \
         "$IMAGE_NAME" \
         /bin/bash
 }
@@ -88,6 +109,74 @@ status() {
     else
         echo "Container is not running"
     fi
+}
+
+gcp() {
+    local subcmd="${1:-}"
+    case "$subcmd" in
+        setup)
+            gcp_run /workspace/scripts/gcp-setup.sh
+            ;;
+        oauth)
+            gcp_run /workspace/scripts/gcp-oauth.sh
+            ;;
+        auth)
+            shift  # remove 'auth' from args
+            gcp_auth "$@"
+            ;;
+        "")
+            echo "Usage: ./gt gcp <subcommand>"
+            echo ""
+            echo "Subcommands:"
+            echo "  setup   Create GCP project and enable APIs"
+            echo "  oauth   Configure OAuth credentials"
+            echo "  auth    Authenticate with Google Cloud"
+            ;;
+        *)
+            echo "Unknown gcp subcommand: $subcmd"
+            exit 1
+            ;;
+    esac
+}
+
+# Handle GCP authentication - requires interactive terminal
+gcp_auth() {
+    if [ ! -t 0 ]; then
+        echo "GCP authentication requires an interactive terminal."
+        echo "Please run this command directly in your terminal:"
+        echo ""
+        echo "  ./gt gcp auth"
+        exit 1
+    fi
+
+    # Ensure .gcloud directory exists
+    mkdir -p "$(pwd)/.gcloud"
+
+    docker run --rm -it \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -w /workspace \
+        "$IMAGE_NAME" \
+        gcloud auth login --no-launch-browser
+}
+
+# Run a command in the container with gcloud credentials from local .gcloud directory
+# Uses /workspace as workdir (not /workspace/web) for access to scripts/
+gcp_run() {
+    # Ensure .gcloud directory exists
+    mkdir -p "$(pwd)/.gcloud"
+
+    # Use -it only if we have a TTY
+    local tty_flags=""
+    if [ -t 0 ]; then
+        tty_flags="-it"
+    fi
+    docker run --rm $tty_flags \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -w /workspace \
+        "$IMAGE_NAME" \
+        "$@"
 }
 
 case "${1:-}" in
@@ -112,6 +201,10 @@ case "${1:-}" in
         ;;
     status)
         status
+        ;;
+    gcp)
+        shift
+        gcp "$@"
         ;;
     -h|--help|help|"")
         usage

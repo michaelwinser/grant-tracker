@@ -762,6 +762,136 @@ export async function createGrantFolder(
 
 ---
 
+## Development Environment
+
+The project uses a config-as-code approach for development environment setup, with Docker containers providing a consistent toolchain.
+
+### Project Structure
+
+```
+grant-tracker/
+├── .devcontainer/       # Container configuration
+│   ├── Dockerfile
+│   ├── devcontainer.json
+│   └── entrypoint.sh
+├── docs/                # Design documents
+│   ├── DESIGN.md
+│   └── PRD.md
+├── mockups/             # Interactive HTML mockups
+├── scripts/             # GCP setup scripts
+│   ├── gcp-config.env.example
+│   ├── gcp-setup.sh
+│   └── gcp-oauth.sh
+├── web/                 # Svelte application
+│   ├── src/
+│   ├── public/
+│   ├── package.json
+│   └── ...
+├── CLAUDE.md            # Claude Code instructions
+└── gt                   # CLI wrapper script
+```
+
+### Dev Container
+
+The development container provides:
+- Node.js 22 (for Svelte/Vite)
+- Google Cloud CLI (for GCP project setup)
+- jq (for JSON processing)
+
+**Credential Persistence:** The container uses a named Docker volume (`grant-tracker-gcloud`) to persist gcloud credentials across container rebuilds.
+
+```json
+// .devcontainer/devcontainer.json
+{
+  "mounts": [
+    "source=grant-tracker-gcloud,target=/home/node/.config/gcloud,type=volume"
+  ]
+}
+```
+
+### CLI Wrapper (`./gt`)
+
+The `gt` script provides a unified interface for common operations:
+
+```bash
+# Container operations
+./gt build              # Build the dev container
+./gt start              # Start the Vite dev server
+./gt stop               # Stop the container
+./gt shell              # Open a shell in the container
+./gt run <cmd>          # Run a command in the container
+
+# GCP setup (runs inside container)
+./gt gcp auth           # Authenticate with Google Cloud
+./gt gcp setup          # Create GCP project and enable APIs
+./gt gcp oauth          # Configure OAuth credentials
+```
+
+### Google Cloud Project Setup
+
+GCP configuration is managed through scripts in `scripts/`:
+
+**1. Configuration (`scripts/gcp-config.env`)**
+
+Copy `gcp-config.env.example` and fill in project-specific values:
+
+```bash
+GCP_PROJECT_ID="grant-tracker-prod"    # Globally unique
+GCP_PROJECT_NAME="Grant Tracker"
+OAUTH_APP_NAME="Grant Tracker"
+GITHUB_PAGES_URL="https://your-org.github.io/grant-tracker"
+```
+
+**2. Project Setup (`scripts/gcp-setup.sh`)**
+
+Creates the GCP project and enables required APIs:
+- Google Sheets API v4
+- Google Drive API v3
+- Google Picker API
+
+**3. OAuth Setup (`scripts/gcp-oauth.sh`)**
+
+Guides OAuth credential configuration. Note: OAuth client creation requires the Google Cloud Console — the script documents the required settings:
+- Application type: Web application
+- Authorized JavaScript origins: `http://localhost:5173`, production URL
+- Required scopes: spreadsheets, drive.file
+
+### Setup Workflow
+
+```bash
+# 1. Configure project settings
+cp scripts/gcp-config.env.example scripts/gcp-config.env
+# Edit with your values
+
+# 2. Build the container
+./gt build
+
+# 3. Authenticate with Google (opens URL to copy into browser)
+./gt gcp auth
+
+# 4. Create GCP project and enable APIs
+./gt gcp setup
+
+# 5. Configure OAuth (follow console instructions)
+./gt gcp oauth
+
+# 6. Start development
+./gt start
+```
+
+### Environment Variables
+
+The web application needs these values at build time:
+
+| Variable | Description | Source |
+|----------|-------------|--------|
+| `VITE_GOOGLE_CLIENT_ID` | OAuth client ID | GCP Console after `./gt gcp oauth` |
+| `VITE_SPREADSHEET_ID` | Google Sheet ID | Created manually or via script |
+
+For local development, add to `web/.env.local`. For production, configure as GitHub repository secrets.
+
+---
+
 ## Implementation Guidance for Claude Code
 
 ### Phase 1: Foundation
@@ -870,5 +1000,5 @@ Alternatively, build a one-time migration script that:
 
 ---
 
-*Document version: 1.0*
-*Last updated: 2025-01-18*
+*Document version: 1.1*
+*Last updated: 2026-01-18*

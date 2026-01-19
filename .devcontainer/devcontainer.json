@@ -4,6 +4,9 @@
     "dockerfile": "Dockerfile",
     "context": ".."
   },
+  "mounts": [
+    "source=grant-tracker-gcloud,target=/home/node/.config/gcloud,type=volume"
+  ],
   "forwardPorts": [5173],
   "customizations": {
     "vscode": {
@@ -15,6 +18,6 @@
       ]
     }
   },
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "cd web && npm install",
   "remoteUser": "node"
 }
