@@ -352,11 +352,12 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
 
     if (!headers) continue;
 
-    // Build columns array for the Table (using pattern from Gemini sample)
+    // Build column properties for the Table
     const columnTypes = COLUMN_TYPES[sheetName] || {};
-    const columns = headers.map((columnName) => {
+    const columnProperties = headers.map((columnName, columnIndex) => {
       const colDef = {
-        name: columnName,
+        columnIndex,
+        columnName,
       };
 
       // Add dropdown type if this column has defined values
@@ -374,7 +375,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
     requests.push({
       addTable: {
         table: {
-          displayName: sheetName,
+          name: sheetName,
           range: {
             sheetId,
             startRowIndex: 0,
@@ -382,7 +383,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
             startColumnIndex: 0,
             endColumnIndex: headers.length,
           },
-          columns,
+          columnProperties,
         },
       },
     });
