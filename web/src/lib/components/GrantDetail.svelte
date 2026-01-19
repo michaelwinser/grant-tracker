@@ -1,9 +1,13 @@
 <script>
   import { grantsStore } from '../stores/grants.svelte.js';
   import { actionItemsStore } from '../stores/actionItems.svelte.js';
+  import { statusHistoryStore } from '../stores/statusHistory.svelte.js';
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
-  import { GrantStatus } from '../models.js';
+  import { GrantStatus, GRANT_STATUS_ORDER } from '../models.js';
+
+  let isUpdatingStatus = $state(false);
+  let statusError = $state(null);
 
   let grant = $derived(() => {
     const grantId = router.params.id;
@@ -18,6 +22,38 @@
   let openActionItems = $derived(() => {
     return grantActionItems().filter(item => item.status === 'Open');
   });
+
+  let grantHistory = $derived(() => {
+    if (!grant()) return [];
+    return statusHistoryStore.getByGrant(grant().grant_id);
+  });
+
+  async function handleStatusChange(event) {
+    const newStatus = event.target.value;
+    const currentGrant = grant();
+    if (!currentGrant || newStatus === currentGrant.status) return;
+
+    isUpdatingStatus = true;
+    statusError = null;
+
+    try {
+      // Record the status change in history
+      await statusHistoryStore.recordChange({
+        grantId: currentGrant.grant_id,
+        fromStatus: currentGrant.status,
+        toStatus: newStatus,
+      });
+
+      // Update the grant
+      await grantsStore.update(currentGrant.grant_id, { status: newStatus });
+    } catch (err) {
+      statusError = err.message;
+      // Reset the select to the original value
+      event.target.value = currentGrant.status;
+    } finally {
+      isUpdatingStatus = false;
+    }
+  }
 
   function formatAmount(amount) {
     if (!amount) return '—';
@@ -118,10 +154,21 @@
       </div>
       <div class="flex items-center gap-3">
         <div class="text-right">
-          <div class="text-sm text-gray-500">Status</div>
-          <div class="mt-1">
-            <StatusBadge status={grant().status} />
-          </div>
+          <label for="status-select" class="text-sm text-gray-500 block">Status</label>
+          <select
+            id="status-select"
+            value={grant().status}
+            onchange={handleStatusChange}
+            disabled={isUpdatingStatus}
+            class="mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50 disabled:cursor-wait"
+          >
+            {#each GRANT_STATUS_ORDER as status}
+              <option value={status}>{status}</option>
+            {/each}
+          </select>
+          {#if statusError}
+            <p class="text-xs text-red-600 mt-1">{statusError}</p>
+          {/if}
         </div>
         <button
           onclick={copyPermalink}
@@ -318,6 +365,42 @@
           <p class="text-sm text-gray-700 whitespace-pre-wrap">{grant().notes}</p>
         </div>
       {/if}
+
+      <!-- Status History -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h2 class="text-lg font-semibold text-gray-900">History</h2>
+        </div>
+        <div class="px-6 py-4">
+          {#if grantHistory().length === 0}
+            <p class="text-sm text-gray-500 italic">No status changes recorded yet.</p>
+          {:else}
+            <ol class="relative border-l border-gray-200 ml-3">
+              {#each grantHistory() as entry, index (entry.history_id)}
+                <li class="mb-6 ml-6 last:mb-0">
+                  <span class="absolute flex items-center justify-center w-6 h-6 {index === 0 ? 'bg-indigo-100' : 'bg-gray-100'} rounded-full -left-3 ring-4 ring-white">
+                    <div class="w-2 h-2 {index === 0 ? 'bg-indigo-500' : 'bg-gray-400'} rounded-full"></div>
+                  </span>
+                  <div class="text-sm">
+                    <span class="text-gray-500">{entry.from_status}</span>
+                    <span class="text-gray-400 mx-1">→</span>
+                    <span class="font-medium {index === 0 ? 'text-gray-900' : 'text-gray-500'}">{entry.to_status}</span>
+                    {#if index === 0}
+                      <span class="text-gray-400 ml-1">— current</span>
+                    {/if}
+                  </div>
+                  <time class="text-xs text-gray-500">
+                    {formatDate(entry.changed_at)} · {entry.changed_by}
+                  </time>
+                  {#if entry.notes}
+                    <p class="text-xs text-gray-500 mt-1">{entry.notes}</p>
+                  {/if}
+                </li>
+              {/each}
+            </ol>
+          {/if}
+        </div>
+      </div>
     </div>
 
     <!-- Sidebar -->

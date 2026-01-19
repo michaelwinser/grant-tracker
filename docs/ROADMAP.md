@@ -125,26 +125,26 @@ Implement grant list and detail views.
 
 ## Phase 5: Dashboard
 
-**Status: Not Started**
+**Status: Complete**
 
 Build the main dashboard with summary widgets.
 
-- [ ] Pipeline summary cards
-  - [ ] Count of grants per stage
-  - [ ] Click to filter grant list
-  - [ ] Color-coded by stage
-- [ ] "My Action Items" widget
-  - [ ] Filter to current user's items
-  - [ ] Show due date, status, grant link
-  - [ ] Inline checkbox to mark complete
-- [ ] "Reports Due" widget
-  - [ ] Reports due this month
-  - [ ] Highlight overdue items
-  - [ ] Quick action to mark received
-- [ ] "Recent Activity" list
-  - [ ] Recently updated grants
-  - [ ] Recent status changes
-- [ ] Responsive layout
+- [x] Pipeline summary cards
+  - [x] Count of grants per stage
+  - [x] Click to filter grant list
+  - [x] Color-coded by stage
+- [x] "My Action Items" widget
+  - [x] Filter to current user's items
+  - [x] Show due date, status, grant link
+  - [ ] Inline checkbox to mark complete (deferred to Phase 7)
+- [x] "Reports Due" widget
+  - [x] Reports due this month
+  - [x] Highlight overdue items
+  - [ ] Quick action to mark received (deferred to Phase 8)
+- [x] "Recent Activity" list
+  - [x] Recently updated grants
+  - [x] Recent status changes
+- [x] Responsive layout
 
 **Blocked by:** Phase 3
 **Blocks:** Nothing
@@ -153,22 +153,22 @@ Build the main dashboard with summary widgets.
 
 ## Phase 6: Status Management
 
-**Status: Not Started**
+**Status: Complete**
 
 Implement grant status tracking with history.
 
-- [ ] Status change UI in grant detail
-  - [ ] Dropdown with available statuses
-  - [ ] Optional: soft validation of transitions
-- [ ] Status change logic
-  - [ ] Update grant record
-  - [ ] Write to StatusHistory sheet
-  - [ ] Update `status_changed_at` timestamp
-- [ ] Status history timeline in grant detail
-  - [ ] Show: previous → new status
-  - [ ] Changed by, changed at
-  - [ ] Optional notes field
-- [ ] Optimistic UI updates
+- [x] Status change UI in grant detail
+  - [x] Dropdown with available statuses
+  - [ ] Optional: soft validation of transitions (deferred)
+- [x] Status change logic
+  - [x] Update grant record
+  - [x] Write to StatusHistory sheet
+  - [x] Update `status_changed_at` timestamp
+- [x] Status history timeline in grant detail
+  - [x] Show: previous → new status
+  - [x] Changed by, changed at
+  - [x] Optional notes field
+- [x] Optimistic UI updates
 
 **Blocked by:** Phase 4 (need grant detail view)
 **Blocks:** Nothing

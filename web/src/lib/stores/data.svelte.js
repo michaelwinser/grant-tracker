@@ -7,6 +7,7 @@ import { grantsStore } from './grants.svelte.js';
 import { actionItemsStore } from './actionItems.svelte.js';
 import { reportsStore } from './reports.svelte.js';
 import { configStore } from './config.svelte.js';
+import { statusHistoryStore } from './statusHistory.svelte.js';
 
 // Reactive state
 let isLoading = $state(false);
@@ -31,6 +32,7 @@ async function loadAll() {
       grantsStore.load(),
       actionItemsStore.load(),
       reportsStore.load(),
+      statusHistoryStore.load(),
     ]);
 
     isLoaded = true;
@@ -59,6 +61,7 @@ function clearAll() {
   actionItemsStore.clear();
   reportsStore.clear();
   configStore.clear();
+  statusHistoryStore.clear();
   isLoaded = false;
   error = null;
 }
@@ -71,6 +74,7 @@ function clearAllErrors() {
   actionItemsStore.clearError();
   reportsStore.clearError();
   configStore.clearError();
+  statusHistoryStore.clearError();
   error = null;
 }
 
@@ -94,7 +98,8 @@ export const dataStore = {
       grantsStore.isLoading ||
       actionItemsStore.isLoading ||
       reportsStore.isLoading ||
-      configStore.isLoading
+      configStore.isLoading ||
+      statusHistoryStore.isLoading
     );
   },
 
@@ -105,7 +110,8 @@ export const dataStore = {
       grantsStore.error ||
       actionItemsStore.error ||
       reportsStore.error ||
-      configStore.error
+      configStore.error ||
+      statusHistoryStore.error
     );
   },
 
@@ -121,3 +127,4 @@ export { grantsStore } from './grants.svelte.js';
 export { actionItemsStore } from './actionItems.svelte.js';
 export { reportsStore } from './reports.svelte.js';
 export { configStore } from './config.svelte.js';
+export { statusHistoryStore } from './statusHistory.svelte.js';

@@ -6,6 +6,27 @@
   import { navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
 
+  // Pipeline stages with colors
+  const pipelineStages = [
+    { status: 'Initial Contact', color: 'bg-gray-100 text-gray-800 border-gray-200' },
+    { status: 'Evaluation Meeting', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+    { status: 'Proposal Development', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    { status: 'Stakeholder Review', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+    { status: 'Approved', color: 'bg-green-100 text-green-800 border-green-200' },
+    { status: 'Signing', color: 'bg-orange-100 text-orange-800 border-orange-200' },
+    { status: 'Active', color: 'bg-green-100 text-green-800 border-green-200' },
+    { status: 'Finished', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+  ];
+
+  // Get grants grouped by status
+  let grantsByStatus = $derived(() => {
+    const counts = {};
+    grantsStore.grants.forEach(g => {
+      counts[g.status] = (counts[g.status] || 0) + 1;
+    });
+    return counts;
+  });
+
   // Get recent grants (last 5 updated)
   let recentGrants = $derived(() => {
     return [...grantsStore.grants]
@@ -65,13 +86,35 @@
     <p class="text-gray-500 mt-1">Welcome back, {userStore.user?.name || 'User'}</p>
   </div>
 
+  <!-- Pipeline Summary -->
+  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Pipeline</h2>
+    <div class="flex flex-wrap gap-3">
+      {#each pipelineStages as stage}
+        {@const count = grantsByStatus()[stage.status] || 0}
+        {#if count > 0}
+          <a
+            href="#/grants?status={encodeURIComponent(stage.status)}"
+            class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border {stage.color} hover:opacity-80 transition-opacity"
+          >
+            <span class="text-2xl font-bold">{count}</span>
+            <span class="text-sm">{stage.status}</span>
+          </a>
+        {/if}
+      {/each}
+      {#if grantsStore.grantCount === 0}
+        <p class="text-gray-500 text-sm">No grants in the pipeline yet.</p>
+      {/if}
+    </div>
+  </div>
+
   <!-- Quick Stats -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
     <a href="#/grants" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:border-indigo-300 transition-colors">
       <p class="text-sm text-gray-500 font-medium">Total Grants</p>
       <p class="text-2xl font-bold text-gray-900 mt-1">{grantsStore.grantCount}</p>
     </a>
-    <a href="#/grants?status=Active" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:border-green-300 transition-colors">
+    <a href="#/grants" class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:border-green-300 transition-colors">
       <p class="text-sm text-green-600 font-medium">Active Grants</p>
       <p class="text-2xl font-bold text-green-900 mt-1">{grantsStore.activeGrants.length}</p>
     </a>

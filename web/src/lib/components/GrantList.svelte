@@ -4,11 +4,11 @@
   import { GrantStatus, GrantType } from '../models.js';
   import StatusBadge from './StatusBadge.svelte';
 
-  // Filter state
+  // Filter state - initialize from URL query params
   let searchQuery = $state('');
-  let statusFilter = $state('');
-  let typeFilter = $state('');
-  let yearFilter = $state('');
+  let statusFilter = $state(router.query.status || '');
+  let typeFilter = $state(router.query.type || '');
+  let yearFilter = $state(router.query.year || '');
 
   // Sort state
   let sortColumn = $state('updated_at');

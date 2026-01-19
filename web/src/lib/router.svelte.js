@@ -6,14 +6,28 @@
 // Reactive state
 let currentPath = $state(window.location.hash.slice(1) || '/');
 let params = $state({});
+let query = $state({});
 
 /**
  * Parse the current hash and extract route info.
  */
 function parseHash() {
-  const hash = window.location.hash.slice(1) || '/';
-  currentPath = hash;
+  let hash = window.location.hash.slice(1) || '/';
   params = {};
+  query = {};
+
+  // Parse query string if present
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex !== -1) {
+    const queryString = hash.slice(queryIndex + 1);
+    hash = hash.slice(0, queryIndex);
+    const searchParams = new URLSearchParams(queryString);
+    for (const [key, value] of searchParams) {
+      query[key] = value;
+    }
+  }
+
+  currentPath = hash;
 
   // Match /grant/:id pattern
   const grantMatch = hash.match(/^\/grant\/(.+)$/);
@@ -60,6 +74,9 @@ export const router = {
   },
   get params() {
     return params;
+  },
+  get query() {
+    return query;
   },
   get route() {
     return getRoute();
