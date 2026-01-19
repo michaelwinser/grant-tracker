@@ -1,6 +1,7 @@
 # Credentials - never commit these
 .env
 token.json
+service-account.json
 
 # Python
 __pycache__/

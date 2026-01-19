@@ -5,11 +5,15 @@ Google Sheets Tables API Proof of Concept
 This script explores how to read and write to Google Sheets using both
 the standard Values API and the Tables API.
 
-Usage:
+Usage (Service Account - recommended for PoC):
+    1. Place service account JSON key as 'service-account.json' in this directory
+    2. Share the spreadsheet with the service account email (as Viewer)
+    3. Run: python sheets_poc.py
+
+Usage (OAuth - for testing as a real user):
     1. Create a .env file with CLIENT_ID and CLIENT_SECRET
-    2. Run: python sheets_poc.py
+    2. Run: python sheets_poc.py --oauth
     3. Complete OAuth in browser
-    4. Script will read the spreadsheet and show data structures
 """
 
 import json
@@ -19,6 +23,7 @@ from pathlib import Path
 
 # Check for required packages
 try:
+    from google.oauth2 import service_account
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
@@ -39,14 +44,46 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
 ]
 
-# OAuth configuration
+# File paths
+SERVICE_ACCOUNT_FILE = Path(__file__).parent / "service-account.json"
+TOKEN_FILE = Path(__file__).parent / "token.json"
+
+# OAuth configuration (only needed if using --oauth)
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
-TOKEN_FILE = Path(__file__).parent / "token.json"
+
+def get_credentials(use_oauth=False):
+    """Get credentials via service account or OAuth."""
+
+    if use_oauth:
+        return get_oauth_credentials()
+    else:
+        return get_service_account_credentials()
 
 
-def get_credentials():
+def get_service_account_credentials():
+    """Get credentials from service account JSON file."""
+    if not SERVICE_ACCOUNT_FILE.exists():
+        print(f"Error: Service account file not found: {SERVICE_ACCOUNT_FILE}")
+        print("\nTo set up:")
+        print("  1. Go to GCP Console > IAM & Admin > Service Accounts")
+        print("  2. Create a service account (or use existing)")
+        print("  3. Create a JSON key and download it")
+        print("  4. Save it as 'service-account.json' in this directory")
+        print("  5. Share your spreadsheet with the service account email")
+        print("\nOr use --oauth flag for user authentication")
+        sys.exit(1)
+
+    creds = service_account.Credentials.from_service_account_file(
+        str(SERVICE_ACCOUNT_FILE),
+        scopes=SCOPES
+    )
+    print(f"Using service account: {creds.service_account_email}")
+    return creds
+
+
+def get_oauth_credentials():
     """Get or refresh OAuth credentials."""
     creds = None
 
@@ -277,9 +314,12 @@ def main():
     print("Grant Tracker - Sheets API Proof of Concept")
     print(f"Spreadsheet ID: {SPREADSHEET_ID}")
 
+    # Check for --oauth flag
+    use_oauth = "--oauth" in sys.argv
+
     # Get credentials
     print("\nAuthenticating...")
-    creds = get_credentials()
+    creds = get_credentials(use_oauth=use_oauth)
 
     # Build the Sheets service
     service = build('sheets', 'v4', credentials=creds)
