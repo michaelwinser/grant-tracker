@@ -298,12 +298,93 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
 }
 
 /**
- * Apply data validation rules and freeze header rows for all sheets.
+ * Create Google Sheets Tables for all data sheets.
+ * Tables provide structured data with column types, dropdowns, and validation.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  * @param {Object[]} sheets - Array of sheet metadata from create response
  */
 async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
+  const requests = [];
+
+  for (const sheet of sheets) {
+    const sheetName = sheet.properties.title;
+    const sheetId = sheet.properties.sheetId;
+    const headers = SCHEMA[sheetName];
+    const validations = VALIDATIONS[sheetName] || {};
+
+    if (!headers) continue;
+
+    // Build column properties for the Table
+    const columnProperties = headers.map((columnName, columnIndex) => {
+      const colDef = {
+        columnIndex,
+        columnName,
+      };
+
+      // Add dropdown validation if this column has defined values
+      if (validations[columnName]) {
+        colDef.columnType = 'DROPDOWN';
+        colDef.dataValidationRule = {
+          condition: {
+            type: 'ONE_OF_LIST',
+            values: validations[columnName].map((v) => ({ userEnteredValue: v })),
+          },
+          showCustomUi: true,
+          strict: false,
+        };
+      }
+
+      return colDef;
+    });
+
+    // Create a Table using the addTable request
+    requests.push({
+      addTable: {
+        table: {
+          name: sheetName,
+          range: {
+            sheetId,
+            startRowIndex: 0,
+            endRowIndex: 2, // Header + 1 row minimum for table
+            startColumnIndex: 0,
+            endColumnIndex: headers.length,
+          },
+          columnProperties,
+        },
+      },
+    });
+  }
+
+  if (requests.length === 0) return;
+
+  const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ requests }),
+  });
+
+  if (!response.ok) {
+    // Log the error but don't fail - Tables may not be available in all accounts
+    const errorText = await response.text();
+    console.warn('Failed to create Tables (falling back to basic formatting):', errorText);
+
+    // Fallback: apply basic formatting without Tables
+    await applyBasicFormatting(accessToken, spreadsheetId, sheets);
+  }
+}
+
+/**
+ * Fallback formatting when Tables API is not available.
+ * Applies data validation and freezes header rows.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ * @param {Object[]} sheets - Array of sheet metadata
+ */
+async function applyBasicFormatting(accessToken, spreadsheetId, sheets) {
   const requests = [];
 
   for (const sheet of sheets) {
@@ -337,7 +418,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
           setDataValidation: {
             range: {
               sheetId,
-              startRowIndex: 1, // Skip header
+              startRowIndex: 1,
               startColumnIndex: columnIndex,
               endColumnIndex: columnIndex + 1,
             },
@@ -347,7 +428,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
                 values: values.map((v) => ({ userEnteredValue: v })),
               },
               showCustomUi: true,
-              strict: false, // Allow other values but show warning
+              strict: false,
             },
           },
         });
@@ -357,7 +438,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
 
   if (requests.length === 0) return;
 
-  const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+  await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -365,11 +446,6 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
     },
     body: JSON.stringify({ requests }),
   });
-
-  if (!response.ok) {
-    // Non-fatal: log but don't throw
-    console.warn('Failed to apply sheet formatting:', await response.text());
-  }
 }
 
 /**
@@ -449,19 +525,27 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
     );
   }
 
-  // Format headers, freeze rows, and add data validation
+  // Get metadata to find sheet IDs, then create Tables
   const metadata = await getSpreadsheetMetadata(accessToken, spreadsheetId);
-  const formatRequests = [];
+  const newSheets = missingSheets
+    .map((sheetName) => {
+      const sheetInfo = metadata.sheets?.find((s) => s.properties.title === sheetName);
+      return sheetInfo ? { properties: sheetInfo.properties } : null;
+    })
+    .filter(Boolean);
 
+  // Create Tables for the new sheets (reuse the applySheetFormatting logic)
+  await applySheetFormatting(accessToken, spreadsheetId, newSheets);
+
+  // Format header rows (Tables may not support custom header formatting)
+  const formatRequests = [];
   for (const sheetName of missingSheets) {
     const sheetInfo = metadata.sheets?.find((s) => s.properties.title === sheetName);
     if (!sheetInfo) continue;
 
     const sheetId = sheetInfo.properties.sheetId;
     const headers = SCHEMA[sheetName];
-    const validations = VALIDATIONS[sheetName];
 
-    // Format header row
     formatRequests.push({
       repeatCell: {
         range: {
@@ -480,46 +564,6 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
         fields: 'userEnteredFormat(textFormat,backgroundColor)',
       },
     });
-
-    // Freeze header row
-    formatRequests.push({
-      updateSheetProperties: {
-        properties: {
-          sheetId,
-          gridProperties: {
-            frozenRowCount: 1,
-          },
-        },
-        fields: 'gridProperties.frozenRowCount',
-      },
-    });
-
-    // Add data validation for dropdown columns
-    if (validations) {
-      for (const [columnName, values] of Object.entries(validations)) {
-        const columnIndex = headers.indexOf(columnName);
-        if (columnIndex === -1) continue;
-
-        formatRequests.push({
-          setDataValidation: {
-            range: {
-              sheetId,
-              startRowIndex: 1,
-              startColumnIndex: columnIndex,
-              endColumnIndex: columnIndex + 1,
-            },
-            rule: {
-              condition: {
-                type: 'ONE_OF_LIST',
-                values: values.map((v) => ({ userEnteredValue: v })),
-              },
-              showCustomUi: true,
-              strict: false,
-            },
-          },
-        });
-      }
-    }
   }
 
   if (formatRequests.length > 0) {
