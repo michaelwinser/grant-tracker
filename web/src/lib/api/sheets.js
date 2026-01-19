@@ -144,6 +144,40 @@ export const SCHEMA = {
 };
 
 /**
+ * Data validation rules for dropdown columns.
+ * Maps sheet name -> column name -> list of valid values.
+ */
+export const VALIDATIONS = {
+  Grants: {
+    type: ['Grant', 'Contract'],
+    status: [
+      'Initial Contact',
+      'Evaluation Meeting',
+      'Proposal Development',
+      'Stakeholder Review',
+      'Approved',
+      'Rejected',
+      'Deferred',
+      'Notification',
+      'Signing',
+      'Disbursement',
+      'Active',
+      'Finished',
+    ],
+  },
+  ActionItems: {
+    status: ['Open', 'Done', 'Cancelled'],
+  },
+  Reports: {
+    report_type: ['Monthly', 'Quarterly', 'Annual'],
+    status: ['Expected', 'Received', 'Overdue'],
+  },
+  Artifacts: {
+    artifact_type: ['Blog Post', 'Meeting Notes', 'Announcement', 'Final Report', 'Other'],
+  },
+};
+
+/**
  * Default configuration values for a new spreadsheet.
  */
 const DEFAULT_CONFIG = [
@@ -252,7 +286,8 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
 
   const data = await response.json();
 
-  // Add default config values
+  // Apply data validation, freeze headers, and add default config
+  await applySheetFormatting(accessToken, data.spreadsheetId, data.sheets);
   await addDefaultConfig(accessToken, data.spreadsheetId);
 
   return {
@@ -260,6 +295,81 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
     name: data.properties.title,
     url: data.spreadsheetUrl,
   };
+}
+
+/**
+ * Apply data validation rules and freeze header rows for all sheets.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ * @param {Object[]} sheets - Array of sheet metadata from create response
+ */
+async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
+  const requests = [];
+
+  for (const sheet of sheets) {
+    const sheetName = sheet.properties.title;
+    const sheetId = sheet.properties.sheetId;
+    const headers = SCHEMA[sheetName];
+    const validations = VALIDATIONS[sheetName];
+
+    if (!headers) continue;
+
+    // Freeze the header row
+    requests.push({
+      updateSheetProperties: {
+        properties: {
+          sheetId,
+          gridProperties: {
+            frozenRowCount: 1,
+          },
+        },
+        fields: 'gridProperties.frozenRowCount',
+      },
+    });
+
+    // Add data validation for dropdown columns
+    if (validations) {
+      for (const [columnName, values] of Object.entries(validations)) {
+        const columnIndex = headers.indexOf(columnName);
+        if (columnIndex === -1) continue;
+
+        requests.push({
+          setDataValidation: {
+            range: {
+              sheetId,
+              startRowIndex: 1, // Skip header
+              startColumnIndex: columnIndex,
+              endColumnIndex: columnIndex + 1,
+            },
+            rule: {
+              condition: {
+                type: 'ONE_OF_LIST',
+                values: values.map((v) => ({ userEnteredValue: v })),
+              },
+              showCustomUi: true,
+              strict: false, // Allow other values but show warning
+            },
+          },
+        });
+      }
+    }
+  }
+
+  if (requests.length === 0) return;
+
+  const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ requests }),
+  });
+
+  if (!response.ok) {
+    // Non-fatal: log but don't throw
+    console.warn('Failed to apply sheet formatting:', await response.text());
+  }
 }
 
 /**
@@ -339,7 +449,7 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
     );
   }
 
-  // Format headers
+  // Format headers, freeze rows, and add data validation
   const metadata = await getSpreadsheetMetadata(accessToken, spreadsheetId);
   const formatRequests = [];
 
@@ -347,11 +457,15 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
     const sheetInfo = metadata.sheets?.find((s) => s.properties.title === sheetName);
     if (!sheetInfo) continue;
 
+    const sheetId = sheetInfo.properties.sheetId;
     const headers = SCHEMA[sheetName];
+    const validations = VALIDATIONS[sheetName];
+
+    // Format header row
     formatRequests.push({
       repeatCell: {
         range: {
-          sheetId: sheetInfo.properties.sheetId,
+          sheetId,
           startRowIndex: 0,
           endRowIndex: 1,
           startColumnIndex: 0,
@@ -366,6 +480,46 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
         fields: 'userEnteredFormat(textFormat,backgroundColor)',
       },
     });
+
+    // Freeze header row
+    formatRequests.push({
+      updateSheetProperties: {
+        properties: {
+          sheetId,
+          gridProperties: {
+            frozenRowCount: 1,
+          },
+        },
+        fields: 'gridProperties.frozenRowCount',
+      },
+    });
+
+    // Add data validation for dropdown columns
+    if (validations) {
+      for (const [columnName, values] of Object.entries(validations)) {
+        const columnIndex = headers.indexOf(columnName);
+        if (columnIndex === -1) continue;
+
+        formatRequests.push({
+          setDataValidation: {
+            range: {
+              sheetId,
+              startRowIndex: 1,
+              startColumnIndex: columnIndex,
+              endColumnIndex: columnIndex + 1,
+            },
+            rule: {
+              condition: {
+                type: 'ONE_OF_LIST',
+                values: values.map((v) => ({ userEnteredValue: v })),
+              },
+              showCustomUi: true,
+              strict: false,
+            },
+          },
+        });
+      }
+    }
   }
 
   if (formatRequests.length > 0) {
