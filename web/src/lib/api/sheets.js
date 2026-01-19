@@ -146,20 +146,38 @@ export const SCHEMA = {
 /**
  * Column types for Tables.
  * Maps sheet name -> column name -> column type.
- * Note: Only certain types are supported by the Tables API.
+ * Supported types: NUMBER, TEXT, DATE, DATE_TIME, CHECKBOX, DROPDOWN, PERCENT,
+ *                  PEOPLE_CHIP, FILE_CHIP, RATING_CHIP
  * DROPDOWN is handled separately via VALIDATIONS.
- * Other types (dates, numbers) are inferred by Sheets from the data.
  */
 export const COLUMN_TYPES = {
   Grants: {
-    // Percent columns - explicitly supported
     category_a_pct: 'PERCENT',
     category_b_pct: 'PERCENT',
     category_c_pct: 'PERCENT',
     category_d_pct: 'PERCENT',
-    // Note: amount, grant_year, and date columns will be inferred from data
+    amount: 'NUMBER',
+    grant_year: 'NUMBER',
+    created_at: 'DATE',
+    updated_at: 'DATE',
+    status_changed_at: 'DATE',
   },
-  // Other sheets: types inferred from data
+  ActionItems: {
+    due_date: 'DATE',
+    created_at: 'DATE',
+    completed_at: 'DATE',
+  },
+  Reports: {
+    due_date: 'DATE',
+    received_date: 'DATE',
+  },
+  Artifacts: {
+    date: 'DATE',
+    created_at: 'DATE',
+  },
+  StatusHistory: {
+    changed_at: 'DATE',
+  },
 };
 
 /**
@@ -334,25 +352,18 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
 
     if (!headers) continue;
 
-    // Build column properties for the Table
+    // Build columns array for the Table (using pattern from Gemini sample)
     const columnTypes = COLUMN_TYPES[sheetName] || {};
-    const columnProperties = headers.map((columnName, columnIndex) => {
+    const columns = headers.map((columnName) => {
       const colDef = {
-        columnIndex,
-        columnName,
+        name: columnName,
       };
 
-      // Add dropdown validation if this column has defined values
+      // Add dropdown type if this column has defined values
       if (validations[columnName]) {
         colDef.columnType = 'DROPDOWN';
-        colDef.dataValidationRule = {
-          condition: {
-            type: 'ONE_OF_LIST',
-            values: validations[columnName].map((v) => ({ userEnteredValue: v })),
-          },
-        };
       } else if (columnTypes[columnName]) {
-        // Apply specific column type
+        // Apply specific column type (NUMBER, DATE, PERCENT, etc.)
         colDef.columnType = columnTypes[columnName];
       }
 
@@ -363,7 +374,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
     requests.push({
       addTable: {
         table: {
-          name: sheetName,
+          displayName: sheetName,
           range: {
             sheetId,
             startRowIndex: 0,
@@ -371,7 +382,7 @@ async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
             startColumnIndex: 0,
             endColumnIndex: headers.length,
           },
-          columnProperties,
+          columns,
         },
       },
     });
