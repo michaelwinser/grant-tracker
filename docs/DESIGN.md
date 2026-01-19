@@ -57,6 +57,8 @@ This document describes the technical architecture for Grant Tracker, a lightwei
 
 ## Data Model (Google Sheets)
 
+> **Note:** For the complete, authoritative schema including template creation instructions, see **[SCHEMA.md](SCHEMA.md)**.
+
 The spreadsheet uses Google Sheets **Tables** feature for schema enforcement. Tables provide:
 - Column typing and validation
 - Dropdown lists for enumerated values
@@ -81,7 +83,6 @@ The spreadsheet uses Google Sheets **Tables** feature for schema enforcement. Ta
 | `amount` | Currency | | Grant/contract value |
 | `grant_year` | Number | YYYY | Year of work (not disbursement) |
 | `status` | Dropdown | See lifecycle stages | Current stage |
-| `program_manager` | Dropdown | Team member list | Assigned PM |
 | `proposal_doc_url` | URL | | Link to collaborative proposal |
 | `internal_notes_url` | URL | | Link to private notes doc |
 | `drive_folder_url` | URL | | Link to grant folder |
