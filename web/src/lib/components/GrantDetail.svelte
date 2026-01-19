@@ -6,7 +6,11 @@
   import { configStore } from '../stores/config.svelte.js';
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
+  import GrantFormModal from './GrantFormModal.svelte';
   import { GrantStatus, GRANT_STATUS_ORDER, ArtifactType } from '../models.js';
+
+  // Edit modal state
+  let showEditModal = $state(false);
 
   let isUpdatingStatus = $state(false);
   let statusError = $state(null);
@@ -319,6 +323,15 @@
             <p class="text-xs text-red-600 mt-1">{statusError}</p>
           {/if}
         </div>
+        <button
+          onclick={() => showEditModal = true}
+          class="p-2 text-gray-400 hover:text-indigo-600"
+          title="Edit grant"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+          </svg>
+        </button>
         <button
           onclick={copyPermalink}
           class="p-2 text-gray-400 hover:text-gray-600"
@@ -783,12 +796,6 @@
               <dd class="text-sm text-gray-900 mt-1">{grant().ecosystem}</dd>
             </div>
           {/if}
-          {#if grant().program_manager}
-            <div>
-              <dt class="text-xs text-gray-500">Program Manager</dt>
-              <dd class="text-sm text-gray-900 mt-1">{grant().program_manager}</dd>
-            </div>
-          {/if}
         </dl>
       </div>
 
@@ -843,4 +850,13 @@
       </div>
     </div>
   </div>
+
+  <!-- Edit Grant Modal -->
+  {#if showEditModal}
+    <GrantFormModal
+      grant={grant()}
+      onClose={() => showEditModal = false}
+      onSaved={() => showEditModal = false}
+    />
+  {/if}
 {/if}

@@ -89,7 +89,6 @@ export const SCHEMA = {
     'amount',
     'grant_year',
     'status',
-    'program_manager',
     'proposal_doc_url',
     'internal_notes_url',
     'drive_folder_url',

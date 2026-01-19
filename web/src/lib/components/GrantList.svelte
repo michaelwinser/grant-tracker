@@ -3,6 +3,10 @@
   import { router, navigate } from '../router.svelte.js';
   import { GrantStatus, GrantType } from '../models.js';
   import StatusBadge from './StatusBadge.svelte';
+  import GrantFormModal from './GrantFormModal.svelte';
+
+  // Modal state
+  let showNewGrantModal = $state(false);
 
   // Filter state - initialize from URL query params
   let searchQuery = $state('');
@@ -149,6 +153,11 @@
     if (sortColumn !== column) return '↕';
     return sortDirection === 'asc' ? '↑' : '↓';
   }
+
+  function handleGrantSaved(grant) {
+    // Navigate to the new grant's detail page
+    navigate(`/grant/${encodeURIComponent(grant.grant_id)}`);
+  }
 </script>
 
 <div class="space-y-6">
@@ -160,11 +169,9 @@
         {grantsStore.grantCount} grants · {grantsStore.activeGrants.length} active
       </p>
     </div>
-    <!-- New Grant button - placeholder for future -->
     <button
-      class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors opacity-50 cursor-not-allowed"
-      disabled
-      title="Coming soon"
+      onclick={() => showNewGrantModal = true}
+      class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
     >
       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -333,3 +340,11 @@
     </div>
   {/if}
 </div>
+
+<!-- New Grant Modal -->
+{#if showNewGrantModal}
+  <GrantFormModal
+    onClose={() => showNewGrantModal = false}
+    onSaved={handleGrantSaved}
+  />
+{/if}

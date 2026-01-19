@@ -130,7 +130,6 @@ export const ArtifactType = {
  * @property {number} [amount] - Grant/contract value
  * @property {number} [grant_year] - Year of work
  * @property {string} status - Current pipeline stage
- * @property {string} [program_manager] - Assigned PM
  * @property {string} [proposal_doc_url] - Link to collaborative proposal
  * @property {string} [internal_notes_url] - Link to private notes doc
  * @property {string} [drive_folder_url] - Link to grant folder
