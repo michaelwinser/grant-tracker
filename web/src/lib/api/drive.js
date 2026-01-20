@@ -221,16 +221,20 @@ export async function folderExists(accessToken, folderId) {
  * Create the complete folder structure for a new grant.
  * Creates:
  * - [GRANT-ID]/ folder under the Grants/ folder
- * - [GRANT-ID]-Tracker doc
+ * - [GRANT-ID]-Tracker doc (optionally initialized with grant metadata)
  * - [GRANT-ID]-Proposal doc
  * - Reports/ subfolder
  *
  * @param {string} accessToken - OAuth access token
  * @param {string} grantsFolderId - ID of the parent Grants/ folder
  * @param {string} grantId - Grant ID (e.g., "PYPI-2026-Packaging")
+ * @param {Object} [grant] - Optional grant data to initialize Tracker doc
  * @returns {Promise<{folderId: string, folderUrl: string, trackerUrl: string, proposalUrl: string, reportsFolderId: string}>}
  */
-export async function createGrantFolderStructure(accessToken, grantsFolderId, grantId) {
+export async function createGrantFolderStructure(accessToken, grantsFolderId, grantId, grant = null) {
+  // Import docs module dynamically to avoid circular dependencies
+  const { initializeTrackerDoc } = await import('./docs.js');
+
   // Create the grant folder
   const grantFolder = await createFolder(accessToken, grantId, grantsFolderId);
 
@@ -240,6 +244,16 @@ export async function createGrantFolderStructure(accessToken, grantsFolderId, gr
     createDoc(accessToken, `${grantId}-Proposal`, grantFolder.id),
     createFolder(accessToken, 'Reports', grantFolder.id),
   ]);
+
+  // Initialize Tracker doc with grant metadata if grant data provided
+  if (grant) {
+    try {
+      await initializeTrackerDoc(accessToken, trackerDoc.id, grant);
+    } catch (err) {
+      console.warn('Failed to initialize Tracker doc:', err);
+      // Don't fail the whole operation if doc init fails
+    }
+  }
 
   return {
     folderId: grantFolder.id,

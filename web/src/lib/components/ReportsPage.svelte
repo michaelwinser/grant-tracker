@@ -9,13 +9,14 @@
   let isLoading = $state(false);
   let error = $state(null);
   let loadedGrantIds = $state(new Set());
+  let loadInitiated = $state(false);
 
   // Filter state
   let grantFilter = $state('');
   let searchQuery = $state('');
 
   // Get grants that have folders
-  let grantsWithFolders = $derived(() => {
+  let grantsWithFolders = $derived.by(() => {
     return grantsStore.grants.filter(g => g.Folder_URL);
   });
 
@@ -28,7 +29,11 @@
 
   // Load reports when grants are available
   $effect(() => {
-    if (grantsWithFolders().length > 0 && userStore.accessToken && !isLoading) {
+    const grants = grantsWithFolders;
+    const token = userStore.accessToken;
+
+    if (grants.length > 0 && token && !loadInitiated) {
+      loadInitiated = true;
       loadAllReports();
     }
   });
@@ -40,7 +45,7 @@
     loadedGrantIds = new Set();
 
     try {
-      const grants = grantsWithFolders();
+      const grants = grantsWithFolders;
 
       // Load reports for each grant in parallel (with concurrency limit)
       const batchSize = 5;
@@ -104,7 +109,7 @@
   }
 
   // Filter reports
-  let filteredReports = $derived(() => {
+  let filteredReports = $derived.by(() => {
     let items = [...allReports];
 
     // Apply grant filter
@@ -126,7 +131,7 @@
   });
 
   // Get unique grants from reports
-  let grantsInReports = $derived(() => {
+  let grantsInReports = $derived.by(() => {
     const grantIds = new Set(allReports.map(r => r.grantId));
     return grantsStore.grants.filter(g => grantIds.has(g.ID));
   });
@@ -163,7 +168,9 @@
   }
 
   function refresh() {
+    loadInitiated = false;
     loadAllReports();
+    loadInitiated = true;
   }
 </script>
 
@@ -217,7 +224,7 @@
           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
           <option value="">All grants</option>
-          {#each grantsInReports() as grant}
+          {#each grantsInReports as grant}
             <option value={grant.ID}>{grant.ID}</option>
           {/each}
         </select>
@@ -242,7 +249,7 @@
       </svg>
       <p class="text-gray-600">Loading reports from Drive...</p>
     </div>
-  {:else if grantsWithFolders().length === 0}
+  {:else if grantsWithFolders.length === 0}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
       <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -250,7 +257,7 @@
       <h3 class="text-lg font-medium text-gray-900 mb-2">No grant folders set up</h3>
       <p class="text-gray-500">Create folders for your grants to start tracking reports.</p>
     </div>
-  {:else if filteredReports().length === 0}
+  {:else if filteredReports.length === 0}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
       <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -283,7 +290,7 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each filteredReports() as report (report.id)}
+          {#each filteredReports as report (report.id)}
             <tr class="hover:bg-gray-50">
               <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
@@ -346,7 +353,7 @@
 
     <!-- Results count -->
     <div class="text-sm text-gray-500">
-      Showing {filteredReports().length} of {allReports.length} reports
+      Showing {filteredReports.length} of {allReports.length} reports
     </div>
   {/if}
 </div>

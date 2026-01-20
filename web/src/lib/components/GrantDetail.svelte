@@ -7,6 +7,7 @@
   import GrantFormModal from './GrantFormModal.svelte';
   import { createGrantFolderStructure, listFiles, addFileToFolder } from '../api/drive.js';
   import { openFilePicker } from '../api/picker.js';
+  import { syncGrantToTrackerDoc } from '../api/docs.js';
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -17,6 +18,8 @@
   let statusError = $state(null);
   let isCreatingFolder = $state(false);
   let folderError = $state(null);
+  let isSyncingTracker = $state(false);
+  let syncError = $state(null);
 
   // Attachments state
   let attachments = $state([]);
@@ -184,7 +187,8 @@
       const folderResult = await createGrantFolderStructure(
         userStore.accessToken,
         folderStore.grantsFolderId,
-        currentGrant.ID
+        currentGrant.ID,
+        currentGrant
       );
 
       // Update the grant with folder/doc URLs
@@ -197,6 +201,22 @@
       folderError = err.message;
     } finally {
       isCreatingFolder = false;
+    }
+  }
+
+  async function handleSyncTracker() {
+    const currentGrant = grant();
+    if (!currentGrant?.Tracker_URL) return;
+
+    isSyncingTracker = true;
+    syncError = null;
+
+    try {
+      await syncGrantToTrackerDoc(userStore.accessToken, currentGrant.Tracker_URL, currentGrant);
+    } catch (err) {
+      syncError = err.message;
+    } finally {
+      isSyncingTracker = false;
     }
   }
 
@@ -679,17 +699,39 @@
               </a>
             {/if}
             {#if grant().Tracker_URL}
-              <a
-                href={grant().Tracker_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Tracker Doc
-              </a>
+              <div class="flex items-center justify-between">
+                <a
+                  href={grant().Tracker_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Tracker Doc
+                </a>
+                <button
+                  onclick={handleSyncTracker}
+                  disabled={isSyncingTracker}
+                  class="p-1 text-gray-400 hover:text-indigo-600 disabled:opacity-50"
+                  title="Sync grant data to Tracker doc"
+                >
+                  {#if isSyncingTracker}
+                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                  {:else}
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  {/if}
+                </button>
+              </div>
+              {#if syncError}
+                <p class="text-xs text-red-600 mt-1">{syncError}</p>
+              {/if}
             {/if}
             {#if grant().Proposal_URL}
               <a

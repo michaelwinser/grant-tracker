@@ -117,7 +117,8 @@
             const folderResult = await createGrantFolderStructure(
               userStore.accessToken,
               folderStore.grantsFolderId,
-              grantData.ID
+              grantData.ID,
+              grantData
             );
 
             // Update the grant with folder/doc URLs
