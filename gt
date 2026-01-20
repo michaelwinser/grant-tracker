@@ -9,7 +9,7 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  build       Rebuild the dev container"
-    echo "  start       Start the dev server (port 5173)"
+    echo "  start       Start the dev server (port 5174)"
     echo "  stop        Stop the running container"
     echo "  run <cmd>   Run a command in the container"
     echo "  shell       Open a shell in the container"
@@ -44,7 +44,7 @@ start() {
     # Remove stopped container if exists
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
-    echo "Starting dev server on http://localhost:5173"
+    echo "Starting dev server on http://localhost:5174"
     # Use -it only if we have a TTY
     local tty_flags=""
     if [ -t 0 ]; then
@@ -52,7 +52,7 @@ start() {
     fi
     docker run --rm $tty_flags \
         --name "$CONTAINER_NAME" \
-        -p 5173:5173 \
+        -p 5174:5174 \
         -v "$(pwd)":/workspace \
         "$IMAGE_NAME"
 }

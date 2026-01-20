@@ -20,7 +20,7 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 WORKDIR /workspace/web
 
 # Expose Vite dev server port
-EXPOSE 5173
+EXPOSE 5174
 
 # Copy entrypoint script
 COPY .devcontainer/entrypoint.sh /entrypoint.sh
@@ -29,4 +29,4 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command: run dev server with host binding for container access
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5174"]
