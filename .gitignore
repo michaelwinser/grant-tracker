@@ -36,3 +36,4 @@ scripts/gcp-config.env
 
 # GCP credentials (local gcloud config)
 .gcloud/
+keys/

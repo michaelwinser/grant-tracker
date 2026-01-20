@@ -2,7 +2,7 @@
 
 This document tracks implementation progress and planned work for Grant Tracker.
 
-**Last updated:** 2026-01-19 (v2 phases added)
+**Last updated:** 2026-01-19 (Phase 16 complete)
 
 ## Status Legend
 
@@ -360,18 +360,18 @@ Server-side validation in Google Sheets.
 
 ## Phase 15: Foundation Improvements
 
-**Status: Not Started**
+**Status: Partial (root folder setup complete)**
 
 Auth enhancements and workflow streamlining.
 
-- [ ] Auth credential caching
-  - [ ] Persist OAuth tokens in sessionStorage
-  - [ ] Auto-restore session on page reload
-  - [ ] Clear on explicit sign-out
-- [ ] Root folder setup
-  - [ ] Folder picker for selecting/creating root folder
-  - [ ] Store root folder ID alongside spreadsheet ID
-  - [ ] Create Grants/ subfolder structure
+- [x] Auth credential caching
+  - [x] Persist OAuth tokens in sessionStorage
+  - [x] Auto-restore session on page reload
+  - [x] Clear on explicit sign-out
+- [x] Root folder setup
+  - [x] Folder picker for selecting/creating root folder
+  - [x] Store root folder ID alongside spreadsheet ID
+  - [x] Create Grants/ subfolder structure
 - [ ] Simplified grant creation
   - [ ] Minimal "quick create" form (org, title, year, type)
   - [ ] Auto-generate grant ID
@@ -385,7 +385,7 @@ Auth enhancements and workflow streamlining.
 
 ## Phase 16: Drive Folder Architecture
 
-**Status: Not Started**
+**Status: Complete**
 
 New folder-first architecture with Drive as source of truth for files.
 
@@ -402,29 +402,34 @@ New folder-first architecture with Drive as source of truth for files.
             └── [files] → shown as Reports (grantee-writable)
 ```
 
-- [ ] Drive API integration
-  - [ ] Create folder with specific parent
-  - [ ] Create Google Doc from scratch (no template needed)
-  - [ ] List files in folder
-  - [ ] Set sharing permissions
-- [ ] Auto-create on grant creation
-  - [ ] Create grant folder under Grants/
-  - [ ] Create Tracker doc with metadata table structure
-  - [ ] Create Proposal doc (blank)
-  - [ ] Create Reports/ subfolder
-  - [ ] Update grant record with folder/doc URLs
-- [ ] Attachments view in grant detail
-  - [ ] List all files in grant folder (excluding Tracker, Proposal, Reports/)
-  - [ ] Show file name, type icon, modified date
-  - [ ] Click to open in Drive
-- [ ] Reports from folder
-  - [ ] List files in Reports/ subfolder
-  - [ ] Show file name, date (from filename or modified date)
-  - [ ] Remove Reports sheet dependency
-  - [ ] Update /reports page to aggregate from Drive
-- [ ] Handle existing grants
-  - [ ] "Create Folder" button for grants without folders
-  - [ ] Gracefully handle partial folder structures
+- [x] Drive API integration
+  - [x] Create folder with specific parent
+  - [x] Create Google Doc from scratch (no template needed)
+  - [x] List files in folder
+  - [ ] Set sharing permissions (deferred to Phase 18)
+- [x] Auto-create on grant creation
+  - [x] Create grant folder under Grants/
+  - [x] Create Tracker doc (blank, metadata tables deferred to Phase 17)
+  - [x] Create Proposal doc (blank)
+  - [x] Create Reports/ subfolder
+  - [x] Update grant record with folder/doc URLs
+- [x] Attachments view in grant detail
+  - [x] List all files in grant folder (excluding Tracker, Proposal, Reports/)
+  - [x] Show file name, type icon, modified date
+  - [x] Click to open in Drive
+- [x] Reports from folder
+  - [x] List files in Reports/ subfolder
+  - [x] Show file name, date (from modified date)
+  - [x] Remove Reports sheet dependency (ReportsPage reads from Drive)
+  - [x] Update /reports page to aggregate from Drive
+- [x] Handle existing grants
+  - [x] "Create Folder" button for grants without folders
+  - [x] Gracefully handle partial folder structures
+- [x] Add files via Picker
+  - [x] "Add File" button in Attachments section (uses Google Picker)
+  - [x] "Add Report" button in Reports section (uses Google Picker)
+  - [x] Support selecting existing files or uploading new ones
+  - [x] Move selected files to appropriate folder
 
 **Blocked by:** Phase 15 (root folder setup)
 **Blocks:** Phase 17

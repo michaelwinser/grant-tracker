@@ -86,9 +86,10 @@ export function signIn() {
 
 /**
  * Request a new token without user interaction (for refresh).
+ * @param {string} [loginHint] - User's email to help Google identify the session
  * @returns {Promise<{access_token: string, expires_in: number}>}
  */
-export function refreshToken() {
+export function refreshToken(loginHint) {
   return new Promise((resolve, reject) => {
     if (!tokenClient) {
       reject(new Error('Auth not initialized'));
@@ -107,11 +108,22 @@ export function refreshToken() {
     };
 
     tokenClient.error_callback = (error) => {
-      reject(new Error(error.message || 'Token refresh failed'));
+      // Treat popup_closed and popup_blocked as silent failures
+      // (user didn't want to re-auth, or browser blocked it)
+      if (error.type === 'popup_closed' || error.type === 'popup_blocked') {
+        reject(new Error('Silent refresh not available'));
+      } else {
+        reject(new Error(error.message || 'Token refresh failed'));
+      }
     };
 
     // Request without prompt to silently refresh
-    tokenClient.requestAccessToken({ prompt: '' });
+    // login_hint helps Google find the right session
+    const options = { prompt: '' };
+    if (loginHint) {
+      options.hint = loginHint;
+    }
+    tokenClient.requestAccessToken(options);
   });
 }
 

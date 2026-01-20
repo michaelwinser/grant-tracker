@@ -1,35 +1,42 @@
 /**
  * Data models and type definitions for Grant Tracker.
  * Uses JSDoc for type annotations (works with VS Code IntelliSense).
+ *
+ * NOTE: Status values are now loaded dynamically from the Status sheet.
+ * Use grantsStore.statusValues instead of these constants for dropdowns.
+ * These constants are kept for reference and fallback.
  */
 
 /**
  * Grant status values representing the pipeline stages.
+ * NOTE: These may not match actual values in the spreadsheet.
+ * Prefer using grantsStore.statusValues for dynamic values.
  * @readonly
  * @enum {string}
  */
 export const GrantStatus = {
   INITIAL_CONTACT: 'Initial Contact',
-  EVALUATION_MEETING: 'Evaluation Meeting',
+  MEETING: 'Meeting',
   PROPOSAL_DEVELOPMENT: 'Proposal Development',
   STAKEHOLDER_REVIEW: 'Stakeholder Review',
   APPROVED: 'Approved',
-  REJECTED: 'Rejected',
-  DEFERRED: 'Deferred',
   NOTIFICATION: 'Notification',
   SIGNING: 'Signing',
   DISBURSEMENT: 'Disbursement',
   ACTIVE: 'Active',
   FINISHED: 'Finished',
+  REJECTED: 'Rejected',
+  DEFERRED: 'Deferred',
 };
 
 /**
  * All status values in pipeline order.
+ * NOTE: Prefer using grantsStore.statusValues for dynamic values.
  * @type {string[]}
  */
 export const GRANT_STATUS_ORDER = [
   GrantStatus.INITIAL_CONTACT,
-  GrantStatus.EVALUATION_MEETING,
+  GrantStatus.MEETING,
   GrantStatus.PROPOSAL_DEVELOPMENT,
   GrantStatus.STAKEHOLDER_REVIEW,
   GrantStatus.APPROVED,
@@ -43,33 +50,40 @@ export const GRANT_STATUS_ORDER = [
 ];
 
 /**
- * "Active" pipeline statuses (not rejected/deferred/finished).
+ * Terminal statuses (not in active pipeline).
  * @type {string[]}
  */
-export const ACTIVE_STATUSES = [
-  GrantStatus.INITIAL_CONTACT,
-  GrantStatus.EVALUATION_MEETING,
-  GrantStatus.PROPOSAL_DEVELOPMENT,
-  GrantStatus.STAKEHOLDER_REVIEW,
-  GrantStatus.APPROVED,
-  GrantStatus.NOTIFICATION,
-  GrantStatus.SIGNING,
-  GrantStatus.DISBURSEMENT,
-  GrantStatus.ACTIVE,
+export const TERMINAL_STATUSES = [
+  GrantStatus.FINISHED,
+  GrantStatus.REJECTED,
+  GrantStatus.DEFERRED,
 ];
 
 /**
- * Grant type values.
- * @readonly
- * @enum {string}
+ * @typedef {Object} Grant
+ * @property {string} ID - Primary identifier (e.g., "PYPI-2026-Packaging")
+ * @property {string} Title - Human-readable name
+ * @property {string} Organization - Grantee/vendor organization
+ * @property {string} Status - Current pipeline stage
+ * @property {number} [Amount] - Grant/contract value
+ * @property {string} [Primary_Contact] - Primary contact person
+ * @property {string} [Other_Contacts] - Additional contacts
+ * @property {number} [Year] - Year of work
+ * @property {string} [Beneficiary] - Ecosystem/project beneficiary
+ * @property {string} [Tags] - Comma-separated tags
+ * @property {number} [Cat_A_Percent] - % allocation to Category A
+ * @property {number} [Cat_B_Percent] - % allocation to Category B
+ * @property {number} [Cat_C_Percent] - % allocation to Category C
+ * @property {number} [Cat_D_Percent] - % allocation to Category D
  */
-export const GrantType = {
-  GRANT: 'Grant',
-  CONTRACT: 'Contract',
-};
+
+// ============================================================================
+// DEFERRED FEATURES - These types are kept for future phases but not used yet
+// ============================================================================
 
 /**
  * Action item status values.
+ * DEFERRED: ActionItems feature is planned for a future phase.
  * @readonly
  * @enum {string}
  */
@@ -81,6 +95,7 @@ export const ActionItemStatus = {
 
 /**
  * Report type values.
+ * DEFERRED: Reports feature is planned for a future phase.
  * @readonly
  * @enum {string}
  */
@@ -92,6 +107,7 @@ export const ReportType = {
 
 /**
  * Report status values.
+ * DEFERRED: Reports feature is planned for a future phase.
  * @readonly
  * @enum {string}
  */
@@ -103,6 +119,7 @@ export const ReportStatus = {
 
 /**
  * Artifact type values.
+ * DEFERRED: Artifacts feature is planned for a future phase.
  * @readonly
  * @enum {string}
  */
@@ -113,81 +130,6 @@ export const ArtifactType = {
   FINAL_REPORT: 'Final Report',
   OTHER: 'Other',
 };
-
-/**
- * @typedef {Object} Grant
- * @property {string} grant_id - Primary identifier (e.g., "PYPI-2026-Packaging")
- * @property {string} title - Human-readable name
- * @property {string} organization - Grantee/vendor organization
- * @property {string} [contact_name] - Primary contact person
- * @property {string} [contact_email] - Contact email
- * @property {string} type - "Grant" or "Contract"
- * @property {number} [category_a_pct] - % allocation to Category A
- * @property {number} [category_b_pct] - % allocation to Category B
- * @property {number} [category_c_pct] - % allocation to Category C
- * @property {number} [category_d_pct] - % allocation to Category D
- * @property {string} [ecosystem] - Ecosystem beneficiary
- * @property {number} [amount] - Grant/contract value
- * @property {number} [grant_year] - Year of work
- * @property {string} status - Current pipeline stage
- * @property {string} [proposal_doc_url] - Link to collaborative proposal
- * @property {string} [internal_notes_url] - Link to private notes doc
- * @property {string} [drive_folder_url] - Link to grant folder
- * @property {string} [github_repo] - Repo for monthly reports
- * @property {string} [created_at] - When record created
- * @property {string} [updated_at] - Last modification
- * @property {string} [status_changed_at] - When status last changed
- * @property {string} [notes] - Free-form notes
- */
-
-/**
- * @typedef {Object} ActionItem
- * @property {string} item_id - Unique identifier (e.g., "AI-00001")
- * @property {string} grant_id - Foreign key to grant
- * @property {string} description - What needs to be done
- * @property {string} [assignee] - Who's responsible
- * @property {string} [due_date] - When it's due (YYYY-MM-DD)
- * @property {string} status - "Open", "Done", or "Cancelled"
- * @property {string} [source] - Where this came from
- * @property {string} [created_at] - When created
- * @property {string} [completed_at] - When marked done
- */
-
-/**
- * @typedef {Object} Report
- * @property {string} report_id - Unique identifier (e.g., "RPT-00001")
- * @property {string} grant_id - Foreign key to grant
- * @property {string} period - "2025-01" (monthly), "2025-Q1" (quarterly), "2025" (annual)
- * @property {string} report_type - "Monthly", "Quarterly", or "Annual"
- * @property {string} status - "Expected", "Received", or "Overdue"
- * @property {string} [due_date] - When expected (YYYY-MM-DD)
- * @property {string} [received_date] - When actually received
- * @property {string} [url] - Link to report
- * @property {string} [notes] - Notes
- */
-
-/**
- * @typedef {Object} Artifact
- * @property {string} artifact_id - Unique identifier (e.g., "ART-00001")
- * @property {string} grant_id - Foreign key to grant
- * @property {string} artifact_type - Type of artifact
- * @property {string} title - Artifact title
- * @property {string} url - Link to artifact
- * @property {string} [date] - Publication/creation date
- * @property {string} [added_by] - Who added this
- * @property {string} [created_at] - When record created
- */
-
-/**
- * @typedef {Object} StatusHistoryEntry
- * @property {string} history_id - Unique identifier
- * @property {string} grant_id - Foreign key to grant
- * @property {string} [from_status] - Previous status
- * @property {string} to_status - New status
- * @property {string} changed_by - User email
- * @property {string} changed_at - When changed
- * @property {string} [notes] - Optional context
- */
 
 /**
  * Generate a unique ID with a prefix.

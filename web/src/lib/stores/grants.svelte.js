@@ -6,25 +6,30 @@
 import { createSheetsClient } from '../api/sheetsClient.js';
 import { userStore } from './user.svelte.js';
 import { spreadsheetStore } from './spreadsheet.svelte.js';
-import {
-  normalizeRow,
-  nowTimestamp,
-  GrantStatus,
-  GRANT_STATUS_ORDER,
-  ACTIVE_STATUSES,
-} from '../models.js';
+import { readStatusValues, DEFAULT_STATUS_VALUES } from '../api/sheets.js';
 
+/**
+ * Fields that contain numeric data.
+ * With UNFORMATTED_VALUE these come back as numbers already,
+ * but we may need to handle missing values.
+ */
 const NUMBER_FIELDS = [
-  'category_a_pct',
-  'category_b_pct',
-  'category_c_pct',
-  'category_d_pct',
-  'amount',
-  'grant_year',
+  'Amount',
+  'Year',
+  'Cat_A_Percent',
+  'Cat_B_Percent',
+  'Cat_C_Percent',
+  'Cat_D_Percent',
 ];
+
+/**
+ * "Active" statuses (not terminal states).
+ */
+const TERMINAL_STATUSES = ['Finished', 'Rejected', 'Deferred'];
 
 // Reactive state
 let grants = $state([]);
+let statusValues = $state(DEFAULT_STATUS_VALUES);
 let isLoading = $state(false);
 let error = $state(null);
 let lastLoaded = $state(null);
@@ -32,11 +37,11 @@ let lastLoaded = $state(null);
 // Derived state
 const grantsByStatus = $derived(() => {
   const grouped = {};
-  for (const status of GRANT_STATUS_ORDER) {
+  for (const status of statusValues) {
     grouped[status] = [];
   }
   for (const grant of grants) {
-    const status = grant.status || GrantStatus.INITIAL_CONTACT;
+    const status = grant.Status || statusValues[0];
     if (!grouped[status]) {
       grouped[status] = [];
     }
@@ -46,7 +51,7 @@ const grantsByStatus = $derived(() => {
 });
 
 const activeGrants = $derived(
-  grants.filter((g) => ACTIVE_STATUSES.includes(g.status))
+  grants.filter((g) => !TERMINAL_STATUSES.includes(g.Status))
 );
 
 const grantCount = $derived(grants.length);
@@ -63,7 +68,25 @@ function getClient() {
 }
 
 /**
+ * Normalize a row, handling empty values.
+ * @param {Object} row - Raw row from sheets
+ * @returns {Object} - Normalized row
+ */
+function normalizeGrant(row) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (value === '' || value === undefined) {
+      normalized[key] = null;
+    } else {
+      normalized[key] = value;
+    }
+  }
+  return normalized;
+}
+
+/**
  * Load all grants from the spreadsheet.
+ * Also loads status values from the Status sheet.
  * @returns {Promise<void>}
  */
 async function load() {
@@ -72,10 +95,18 @@ async function load() {
 
   try {
     const client = getClient();
+
+    // Load status values for dropdowns
+    statusValues = await readStatusValues(
+      userStore.accessToken,
+      spreadsheetStore.spreadsheetId
+    );
+
+    // Load grants
     const rows = await client.readSheet('Grants');
     grants = rows
-      .map((row) => normalizeRow(row, NUMBER_FIELDS))
-      .filter((row) => row.grant_id); // Filter out empty rows
+      .map(normalizeGrant)
+      .filter((row) => row.ID); // Filter out empty rows
     lastLoaded = new Date();
   } catch (err) {
     error = err.message;
@@ -87,17 +118,11 @@ async function load() {
 
 /**
  * Create a new grant.
- * @param {Object} grantData - Grant data (must include grant_id)
+ * @param {Object} grantData - Grant data (must include ID)
  * @returns {Promise<Object>} - The created grant
  */
 async function create(grantData) {
-  const now = nowTimestamp();
-  const newGrant = {
-    ...grantData,
-    created_at: now,
-    updated_at: now,
-    status_changed_at: now,
-  };
+  const newGrant = { ...grantData };
 
   // Optimistic update
   const previousGrants = [...grants];
@@ -122,30 +147,23 @@ async function create(grantData) {
  * @returns {Promise<Object>} - The updated grant
  */
 async function update(grantId, updates) {
-  const index = grants.findIndex((g) => g.grant_id === grantId);
+  const index = grants.findIndex((g) => g.ID === grantId);
   if (index === -1) {
     throw new Error(`Grant not found: ${grantId}`);
   }
 
-  const now = nowTimestamp();
   const updatedGrant = {
     ...grants[index],
     ...updates,
-    updated_at: now,
   };
-
-  // Track status change
-  if (updates.status && updates.status !== grants[index].status) {
-    updatedGrant.status_changed_at = now;
-  }
 
   // Optimistic update
   const previousGrants = [...grants];
-  grants = grants.map((g) => (g.grant_id === grantId ? updatedGrant : g));
+  grants = grants.map((g) => (g.ID === grantId ? updatedGrant : g));
 
   try {
     const client = getClient();
-    await client.updateById('Grants', 'grant_id', grantId, updatedGrant);
+    await client.updateById('Grants', 'ID', grantId, updatedGrant);
     return updatedGrant;
   } catch (err) {
     // Rollback on failure
@@ -161,18 +179,18 @@ async function update(grantId, updates) {
  * @returns {Promise<void>}
  */
 async function remove(grantId) {
-  const index = grants.findIndex((g) => g.grant_id === grantId);
+  const index = grants.findIndex((g) => g.ID === grantId);
   if (index === -1) {
     throw new Error(`Grant not found: ${grantId}`);
   }
 
   // Optimistic update
   const previousGrants = [...grants];
-  grants = grants.filter((g) => g.grant_id !== grantId);
+  grants = grants.filter((g) => g.ID !== grantId);
 
   try {
     const client = getClient();
-    await client.deleteById('Grants', 'grant_id', grantId);
+    await client.deleteById('Grants', 'ID', grantId);
   } catch (err) {
     // Rollback on failure
     grants = previousGrants;
@@ -187,7 +205,7 @@ async function remove(grantId) {
  * @returns {Object|undefined}
  */
 function getById(grantId) {
-  return grants.find((g) => g.grant_id === grantId);
+  return grants.find((g) => g.ID === grantId);
 }
 
 /**
@@ -211,6 +229,9 @@ export const grantsStore = {
   // State getters (reactive)
   get grants() {
     return grants;
+  },
+  get statusValues() {
+    return statusValues;
   },
   get isLoading() {
     return isLoading;

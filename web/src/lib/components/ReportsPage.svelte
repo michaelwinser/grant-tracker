@@ -1,171 +1,135 @@
 <script>
-  import { reportsStore } from '../stores/reports.svelte.js';
   import { grantsStore } from '../stores/grants.svelte.js';
+  import { userStore } from '../stores/user.svelte.js';
   import { navigate } from '../router.svelte.js';
-  import { ReportStatus, ReportType, todayDate } from '../models.js';
+  import { listFiles } from '../api/drive.js';
+
+  // State
+  let allReports = $state([]);
+  let isLoading = $state(false);
+  let error = $state(null);
+  let loadedGrantIds = $state(new Set());
 
   // Filter state
-  let statusFilter = $state('expected');
-  let typeFilter = $state('');
   let grantFilter = $state('');
-  let periodFilter = $state('');
+  let searchQuery = $state('');
 
-  // Mark received modal state
-  let showMarkReceivedModal = $state(false);
-  let selectedReport = $state(null);
-  let receivedDate = $state(todayDate());
-  let receivedUrl = $state('');
-  let isSubmitting = $state(false);
-
-  // Error state
-  let reportError = $state('');
-
-  // Get unique periods from reports (e.g., "2026-01", "2026-Q1")
-  let availablePeriods = $derived(() => {
-    const periods = new Set();
-    reportsStore.reports.forEach(report => {
-      if (report.period) periods.add(report.period);
-    });
-    return Array.from(periods).sort().reverse();
+  // Get grants that have folders
+  let grantsWithFolders = $derived(() => {
+    return grantsStore.grants.filter(g => g.Folder_URL);
   });
 
-  // Get grants that have reports
-  let grantsWithReports = $derived(() => {
-    const grantIds = new Set();
-    reportsStore.reports.forEach(report => {
-      if (report.grant_id) grantIds.add(report.grant_id);
-    });
-    return grantsStore.grants.filter(g => grantIds.has(g.grant_id));
+  // Extract folder ID from URL
+  function getFolderIdFromUrl(url) {
+    if (!url) return null;
+    const match = url.match(/folders\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
+  }
+
+  // Load reports when grants are available
+  $effect(() => {
+    if (grantsWithFolders().length > 0 && userStore.accessToken && !isLoading) {
+      loadAllReports();
+    }
   });
+
+  async function loadAllReports() {
+    isLoading = true;
+    error = null;
+    allReports = [];
+    loadedGrantIds = new Set();
+
+    try {
+      const grants = grantsWithFolders();
+
+      // Load reports for each grant in parallel (with concurrency limit)
+      const batchSize = 5;
+      for (let i = 0; i < grants.length; i += batchSize) {
+        const batch = grants.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map(grant => loadGrantReports(grant))
+        );
+
+        // Flatten and add to allReports
+        for (const reports of results) {
+          if (reports.length > 0) {
+            allReports = [...allReports, ...reports];
+          }
+        }
+      }
+
+      // Sort by modified time, most recent first
+      allReports = allReports.sort((a, b) => {
+        if (a.modifiedTime && b.modifiedTime) {
+          return b.modifiedTime.localeCompare(a.modifiedTime);
+        }
+        return 0;
+      });
+    } catch (err) {
+      error = err.message;
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function loadGrantReports(grant) {
+    const folderId = getFolderIdFromUrl(grant.Folder_URL);
+    if (!folderId) return [];
+
+    try {
+      // First, list files in grant folder to find Reports subfolder
+      const grantFiles = await listFiles(userStore.accessToken, folderId);
+      const reportsFolder = grantFiles.find(
+        f => f.mimeType === 'application/vnd.google-apps.folder' && f.name === 'Reports'
+      );
+
+      if (!reportsFolder) return [];
+
+      // List files in Reports folder
+      const reportFiles = await listFiles(userStore.accessToken, reportsFolder.id);
+
+      loadedGrantIds = new Set([...loadedGrantIds, grant.ID]);
+
+      // Add grant info to each report
+      return reportFiles.map(file => ({
+        ...file,
+        grantId: grant.ID,
+        grantTitle: grant.Title,
+        reportsFolderId: reportsFolder.id,
+      }));
+    } catch (err) {
+      console.error(`Failed to load reports for ${grant.ID}:`, err);
+      return [];
+    }
+  }
 
   // Filter reports
   let filteredReports = $derived(() => {
-    let items = [...reportsStore.reports];
-    const today = todayDate();
-
-    // Apply status filter
-    if (statusFilter === 'expected') {
-      items = items.filter(r => r.status === ReportStatus.EXPECTED);
-    } else if (statusFilter === 'received') {
-      items = items.filter(r => r.status === ReportStatus.RECEIVED);
-    } else if (statusFilter === 'overdue') {
-      items = items.filter(r => r.status === ReportStatus.EXPECTED && r.due_date && r.due_date < today);
-    }
-
-    // Apply type filter
-    if (typeFilter) {
-      items = items.filter(r => r.report_type === typeFilter);
-    }
+    let items = [...allReports];
 
     // Apply grant filter
     if (grantFilter) {
-      items = items.filter(r => r.grant_id === grantFilter);
+      items = items.filter(r => r.grantId === grantFilter);
     }
 
-    // Apply period filter
-    if (periodFilter) {
-      items = items.filter(r => r.period === periodFilter);
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      items = items.filter(r =>
+        r.name.toLowerCase().includes(query) ||
+        r.grantId.toLowerCase().includes(query) ||
+        (r.grantTitle && r.grantTitle.toLowerCase().includes(query))
+      );
     }
-
-    // Sort by due date (earliest first)
-    items.sort((a, b) => {
-      if (a.due_date && b.due_date) {
-        return a.due_date.localeCompare(b.due_date);
-      }
-      if (a.due_date) return -1;
-      if (b.due_date) return 1;
-      return 0;
-    });
 
     return items;
   });
 
-  // Check if report is overdue
-  function isOverdue(report) {
-    if (report.status !== ReportStatus.EXPECTED) return false;
-    return report.due_date && report.due_date < todayDate();
-  }
-
-  // Get status badge class
-  function getStatusBadgeClass(report) {
-    if (report.status === ReportStatus.RECEIVED) {
-      return 'bg-green-100 text-green-800';
-    }
-    if (isOverdue(report)) {
-      return 'bg-red-100 text-red-800';
-    }
-    return 'bg-yellow-100 text-yellow-800';
-  }
-
-  // Get status text
-  function getStatusText(report) {
-    if (report.status === ReportStatus.RECEIVED) {
-      return 'Received';
-    }
-    if (isOverdue(report)) {
-      return 'Overdue';
-    }
-    return 'Expected';
-  }
-
-  // Format due date
-  function formatDueDate(dueDate) {
-    if (!dueDate) return '—';
-    const date = new Date(dueDate);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  // Format received date
-  function formatReceivedDate(date) {
-    if (!date) return '—';
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  // Get grant title
-  function getGrantTitle(grantId) {
-    const grant = grantsStore.getById(grantId);
-    return grant?.title || grantId;
-  }
-
-  // Open mark received modal
-  function openMarkReceived(report) {
-    selectedReport = report;
-    receivedDate = todayDate();
-    receivedUrl = '';
-    showMarkReceivedModal = true;
-  }
-
-  // Handle mark received submission
-  async function handleMarkReceived() {
-    if (!selectedReport) return;
-
-    isSubmitting = true;
-    reportError = '';
-
-    try {
-      await reportsStore.markReceived(
-        selectedReport.report_id,
-        receivedDate,
-        receivedUrl || null
-      );
-      showMarkReceivedModal = false;
-      selectedReport = null;
-    } catch (err) {
-      reportError = err.message;
-    } finally {
-      isSubmitting = false;
-    }
-  }
-
-  // Handle reset to expected
-  async function handleResetToExpected(report) {
-    reportError = '';
-    try {
-      await reportsStore.resetToExpected(report.report_id);
-    } catch (err) {
-      reportError = err.message;
-    }
-  }
+  // Get unique grants from reports
+  let grantsInReports = $derived(() => {
+    const grantIds = new Set(allReports.map(r => r.grantId));
+    return grantsStore.grants.filter(g => grantIds.has(g.ID));
+  });
 
   // Navigate to grant
   function goToGrant(grantId, event) {
@@ -175,71 +139,75 @@
 
   // Clear filters
   function clearFilters() {
-    statusFilter = 'expected';
-    typeFilter = '';
     grantFilter = '';
-    periodFilter = '';
+    searchQuery = '';
   }
 
-  // Count stats
-  let stats = $derived(() => {
-    const today = todayDate();
-    const expected = reportsStore.reports.filter(r => r.status === ReportStatus.EXPECTED).length;
-    const overdue = reportsStore.reports.filter(r =>
-      r.status === ReportStatus.EXPECTED && r.due_date && r.due_date < today
-    ).length;
-    const received = reportsStore.reports.filter(r => r.status === ReportStatus.RECEIVED).length;
-    return { expected, overdue, received };
-  });
+  // Format file size (if available)
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+
+  // Get file icon based on mime type
+  function getFileIcon(mimeType) {
+    if (mimeType === 'application/pdf') return 'pdf';
+    if (mimeType === 'application/vnd.google-apps.document') return 'doc';
+    if (mimeType === 'application/vnd.google-apps.spreadsheet') return 'sheet';
+    if (mimeType?.startsWith('image/')) return 'image';
+    return 'file';
+  }
+
+  function refresh() {
+    loadAllReports();
+  }
 </script>
 
 <div class="space-y-6">
   <!-- Page Header -->
   <div class="flex justify-between items-start">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Report Compliance</h1>
+      <h1 class="text-2xl font-bold text-gray-900">Reports</h1>
       <p class="text-gray-500 mt-1">
-        {stats().expected} expected · {stats().overdue} overdue · {stats().received} received
+        {allReports.length} report{allReports.length !== 1 ? 's' : ''} from {loadedGrantIds.size} grant{loadedGrantIds.size !== 1 ? 's' : ''}
       </p>
     </div>
+    <button
+      onclick={refresh}
+      disabled={isLoading}
+      class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+    >
+      <svg class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      {isLoading ? 'Loading...' : 'Refresh'}
+    </button>
   </div>
 
   <!-- Error display -->
-  {#if reportError}
+  {#if error}
     <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-      {reportError}
-      <button onclick={() => reportError = ''} class="ml-2 text-red-500 hover:text-red-700">Dismiss</button>
+      {error}
+      <button onclick={() => error = null} class="ml-2 text-red-500 hover:text-red-700">Dismiss</button>
     </div>
   {/if}
 
   <!-- Filters -->
   <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
     <div class="flex flex-wrap gap-4 items-end">
-      <div class="w-40">
-        <label for="status-filter" class="block text-xs font-medium text-gray-500 mb-1">Status</label>
-        <select
-          id="status-filter"
-          bind:value={statusFilter}
+      <div class="flex-1 min-w-[200px]">
+        <label for="search" class="block text-xs font-medium text-gray-500 mb-1">Search</label>
+        <input
+          type="text"
+          id="search"
+          bind:value={searchQuery}
+          placeholder="Search reports..."
           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="">All</option>
-          <option value="expected">Expected</option>
-          <option value="overdue">Overdue</option>
-          <option value="received">Received</option>
-        </select>
-      </div>
-      <div class="w-36">
-        <label for="type-filter" class="block text-xs font-medium text-gray-500 mb-1">Type</label>
-        <select
-          id="type-filter"
-          bind:value={typeFilter}
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="">All types</option>
-          {#each Object.values(ReportType) as type}
-            <option value={type}>{type}</option>
-          {/each}
-        </select>
+        />
       </div>
       <div class="w-48">
         <label for="grant-filter" class="block text-xs font-medium text-gray-500 mb-1">Grant</label>
@@ -249,25 +217,12 @@
           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
           <option value="">All grants</option>
-          {#each grantsWithReports() as grant}
-            <option value={grant.grant_id}>{grant.grant_id}</option>
+          {#each grantsInReports() as grant}
+            <option value={grant.ID}>{grant.ID}</option>
           {/each}
         </select>
       </div>
-      <div class="w-40">
-        <label for="period-filter" class="block text-xs font-medium text-gray-500 mb-1">Period</label>
-        <select
-          id="period-filter"
-          bind:value={periodFilter}
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="">All periods</option>
-          {#each availablePeriods() as period}
-            <option value={period}>{period}</option>
-          {/each}
-        </select>
-      </div>
-      {#if typeFilter || grantFilter || periodFilter || statusFilter !== 'expected'}
+      {#if grantFilter || searchQuery}
         <button
           onclick={clearFilters}
           class="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
@@ -279,22 +234,30 @@
   </div>
 
   <!-- Reports list -->
-  {#if reportsStore.isLoading}
+  {#if isLoading && allReports.length === 0}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
       <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
       </svg>
-      <p class="text-gray-600">Loading reports...</p>
+      <p class="text-gray-600">Loading reports from Drive...</p>
+    </div>
+  {:else if grantsWithFolders().length === 0}
+    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
+      <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+      </svg>
+      <h3 class="text-lg font-medium text-gray-900 mb-2">No grant folders set up</h3>
+      <p class="text-gray-500">Create folders for your grants to start tracking reports.</p>
     </div>
   {:else if filteredReports().length === 0}
     <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
       <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
-      {#if reportsStore.reports.length === 0}
+      {#if allReports.length === 0}
         <h3 class="text-lg font-medium text-gray-900 mb-2">No reports yet</h3>
-        <p class="text-gray-500">Expected reports will appear here when added to grants.</p>
+        <p class="text-gray-500">Reports will appear here when files are added to grant Reports/ folders in Drive.</p>
       {:else}
         <h3 class="text-lg font-medium text-gray-900 mb-2">No matching reports</h3>
         <p class="text-gray-500">Try adjusting your filters.</p>
@@ -306,19 +269,13 @@
         <thead class="bg-gray-50">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Report
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Grant
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Period
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Type
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Due Date
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Status
+              Date
             </th>
             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
               Actions
@@ -326,67 +283,60 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each filteredReports() as report (report.report_id)}
-            <tr class="hover:bg-gray-50 {isOverdue(report) ? 'bg-red-50/50' : ''}">
+          {#each filteredReports() as report (report.id)}
+            <tr class="hover:bg-gray-50">
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                  <div class="flex-shrink-0">
+                    {#if getFileIcon(report.mimeType) === 'pdf'}
+                      <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+                      </svg>
+                    {:else if getFileIcon(report.mimeType) === 'doc'}
+                      <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+                      </svg>
+                    {:else if getFileIcon(report.mimeType) === 'sheet'}
+                      <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+                      </svg>
+                    {:else if getFileIcon(report.mimeType) === 'image'}
+                      <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    {:else}
+                      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    {/if}
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">
+                      {report.name}
+                    </p>
+                  </div>
+                </div>
+              </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                {#if report.grant_id}
-                  <button
-                    onclick={(e) => goToGrant(report.grant_id, e)}
-                    class="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium"
-                  >
-                    {report.grant_id}
-                  </button>
-                {:else}
-                  <span class="text-gray-400">—</span>
-                {/if}
+                <button
+                  onclick={(e) => goToGrant(report.grantId, e)}
+                  class="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium"
+                >
+                  {report.grantId}
+                </button>
               </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {report.period || '—'}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {report.report_type || '—'}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm">
-                <span class="{isOverdue(report) ? 'text-red-600 font-medium' : 'text-gray-900'}">
-                  {formatDueDate(report.due_date)}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {getStatusBadgeClass(report)}">
-                  {getStatusText(report)}
-                </span>
-                {#if report.status === ReportStatus.RECEIVED && report.received_date}
-                  <span class="ml-2 text-xs text-gray-500">
-                    {formatReceivedDate(report.received_date)}
-                  </span>
-                {/if}
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {formatDate(report.modifiedTime)}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
-                {#if report.status === ReportStatus.EXPECTED}
-                  <button
-                    onclick={() => openMarkReceived(report)}
-                    class="text-indigo-600 hover:text-indigo-800 font-medium"
-                  >
-                    Mark Received
-                  </button>
-                {:else if report.status === ReportStatus.RECEIVED}
-                  <button
-                    onclick={() => handleResetToExpected(report)}
-                    class="text-gray-500 hover:text-gray-700"
-                  >
-                    Reset
-                  </button>
-                  {#if report.url}
-                    <a
-                      href={report.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="ml-3 text-indigo-600 hover:text-indigo-800"
-                    >
-                      View
-                    </a>
-                  {/if}
-                {/if}
+                <a
+                  href={report.webViewLink || `https://drive.google.com/file/d/${report.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  View
+                </a>
               </td>
             </tr>
           {/each}
@@ -396,82 +346,7 @@
 
     <!-- Results count -->
     <div class="text-sm text-gray-500">
-      Showing {filteredReports().length} of {reportsStore.reports.length} reports
+      Showing {filteredReports().length} of {allReports.length} reports
     </div>
   {/if}
 </div>
-
-<!-- Mark Received Modal -->
-{#if showMarkReceivedModal && selectedReport}
-  <div class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-      <!-- Backdrop -->
-      <button
-        type="button"
-        class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity cursor-default"
-        onclick={() => showMarkReceivedModal = false}
-        aria-label="Close modal"
-      ></button>
-
-      <!-- Modal -->
-      <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
-        <div>
-          <h3 class="text-lg font-medium text-gray-900 mb-4">
-            Mark Report Received
-          </h3>
-          <p class="text-sm text-gray-600 mb-4">
-            {selectedReport.report_type} report for {selectedReport.grant_id}
-            {#if selectedReport.period}
-              ({selectedReport.period})
-            {/if}
-          </p>
-
-          <div class="space-y-4">
-            <div>
-              <label for="received-date" class="block text-sm font-medium text-gray-700 mb-1">
-                Date Received
-              </label>
-              <input
-                type="date"
-                id="received-date"
-                bind:value={receivedDate}
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-            </div>
-
-            <div>
-              <label for="report-url" class="block text-sm font-medium text-gray-700 mb-1">
-                Report URL (optional)
-              </label>
-              <input
-                type="url"
-                id="report-url"
-                bind:value={receivedUrl}
-                placeholder="https://..."
-                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="mt-6 flex justify-end space-x-3">
-          <button
-            type="button"
-            onclick={() => showMarkReceivedModal = false}
-            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onclick={handleMarkReceived}
-            disabled={isSubmitting}
-            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-          >
-            {isSubmitting ? 'Saving...' : 'Mark Received'}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}

@@ -28,7 +28,7 @@
   let availableYears = $derived(() => {
     const years = new Set();
     grantsStore.grants.forEach(g => {
-      if (g.grant_year) years.add(g.grant_year);
+      if (g.Year) years.add(g.Year);
     });
     return Array.from(years).sort((a, b) => b - a);
   });
@@ -36,7 +36,7 @@
   // Filter grants by year
   let filteredGrants = $derived(() => {
     if (!yearFilter) return grantsStore.grants;
-    return grantsStore.grants.filter(g => g.grant_year === parseInt(yearFilter));
+    return grantsStore.grants.filter(g => g.Year === parseInt(yearFilter));
   });
 
   // Calculate budget by category for filtered grants
@@ -44,11 +44,11 @@
     const budgets = { A: 0, B: 0, C: 0, D: 0 };
 
     filteredGrants().forEach(grant => {
-      const amount = parseFloat(grant.amount) || 0;
-      const pctA = parseFloat(grant.category_a_pct) || 0;
-      const pctB = parseFloat(grant.category_b_pct) || 0;
-      const pctC = parseFloat(grant.category_c_pct) || 0;
-      const pctD = parseFloat(grant.category_d_pct) || 0;
+      const amount = parseFloat(grant.Amount) || 0;
+      const pctA = parseFloat(grant.Cat_A_Percent) || 0;
+      const pctB = parseFloat(grant.Cat_B_Percent) || 0;
+      const pctC = parseFloat(grant.Cat_C_Percent) || 0;
+      const pctD = parseFloat(grant.Cat_D_Percent) || 0;
 
       budgets.A += amount * (pctA / 100);
       budgets.B += amount * (pctB / 100);
@@ -74,13 +74,13 @@
       yearData[year] = { A: 0, B: 0, C: 0, D: 0 };
 
       grantsStore.grants
-        .filter(g => g.grant_year === year)
+        .filter(g => g.Year === year)
         .forEach(grant => {
-          const amount = parseFloat(grant.amount) || 0;
-          const pctA = parseFloat(grant.category_a_pct) || 0;
-          const pctB = parseFloat(grant.category_b_pct) || 0;
-          const pctC = parseFloat(grant.category_c_pct) || 0;
-          const pctD = parseFloat(grant.category_d_pct) || 0;
+          const amount = parseFloat(grant.Amount) || 0;
+          const pctA = parseFloat(grant.Cat_A_Percent) || 0;
+          const pctB = parseFloat(grant.Cat_B_Percent) || 0;
+          const pctC = parseFloat(grant.Cat_C_Percent) || 0;
+          const pctD = parseFloat(grant.Cat_D_Percent) || 0;
 
           yearData[year].A += amount * (pctA / 100);
           yearData[year].B += amount * (pctB / 100);
@@ -95,16 +95,16 @@
   // Grant breakdown with calculated category amounts
   let grantBreakdown = $derived(() => {
     return filteredGrants().map(grant => {
-      const amount = parseFloat(grant.amount) || 0;
-      const pctA = parseFloat(grant.category_a_pct) || 0;
-      const pctB = parseFloat(grant.category_b_pct) || 0;
-      const pctC = parseFloat(grant.category_c_pct) || 0;
-      const pctD = parseFloat(grant.category_d_pct) || 0;
+      const amount = parseFloat(grant.Amount) || 0;
+      const pctA = parseFloat(grant.Cat_A_Percent) || 0;
+      const pctB = parseFloat(grant.Cat_B_Percent) || 0;
+      const pctC = parseFloat(grant.Cat_C_Percent) || 0;
+      const pctD = parseFloat(grant.Cat_D_Percent) || 0;
 
       return {
-        grant_id: grant.grant_id,
-        organization: grant.organization,
-        grant_year: grant.grant_year,
+        ID: grant.ID,
+        Organization: grant.Organization,
+        Year: grant.Year,
         amount,
         categoryA: amount * (pctA / 100),
         categoryB: amount * (pctB / 100),
@@ -248,8 +248,8 @@
   });
 
   // Navigate to grant
-  function goToGrant(grantId) {
-    navigate(`/grant/${encodeURIComponent(grantId)}`);
+  function goToGrant(id) {
+    navigate(`/grant/${encodeURIComponent(id)}`);
   }
 </script>
 
@@ -360,18 +360,18 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            {#each grantBreakdown() as row (row.grant_id)}
+            {#each grantBreakdown() as row (row.ID)}
               <tr class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <button
-                    onclick={() => goToGrant(row.grant_id)}
+                    onclick={() => goToGrant(row.ID)}
                     class="text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium"
                   >
-                    {row.grant_id}
+                    {row.ID}
                   </button>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {row.organization || '—'}
+                  {row.Organization || '—'}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                   {formatCurrency(row.amount)}

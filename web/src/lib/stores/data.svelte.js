@@ -1,14 +1,12 @@
 /**
  * Master data store that coordinates loading all entity stores.
  * Provides a single interface for loading/clearing all data.
+ *
+ * Simplified schema: only Grants store is active.
+ * ActionItems, Reports, Artifacts, StatusHistory are deferred to future phases.
  */
 
 import { grantsStore } from './grants.svelte.js';
-import { actionItemsStore } from './actionItems.svelte.js';
-import { reportsStore } from './reports.svelte.js';
-import { artifactsStore } from './artifacts.svelte.js';
-import { configStore } from './config.svelte.js';
-import { statusHistoryStore } from './statusHistory.svelte.js';
 
 // Reactive state
 let isLoading = $state(false);
@@ -17,7 +15,6 @@ let isLoaded = $state(false);
 
 /**
  * Load all data from the spreadsheet.
- * Loads config first (for team validation), then other stores in parallel.
  * @returns {Promise<void>}
  */
 async function loadAll() {
@@ -25,18 +22,7 @@ async function loadAll() {
   error = null;
 
   try {
-    // Load config first (needed for team member validation)
-    await configStore.load();
-
-    // Load remaining stores in parallel
-    await Promise.all([
-      grantsStore.load(),
-      actionItemsStore.load(),
-      reportsStore.load(),
-      artifactsStore.load(),
-      statusHistoryStore.load(),
-    ]);
-
+    await grantsStore.load();
     isLoaded = true;
   } catch (err) {
     error = err.message;
@@ -60,11 +46,6 @@ async function reloadAll() {
  */
 function clearAll() {
   grantsStore.clear();
-  actionItemsStore.clear();
-  reportsStore.clear();
-  artifactsStore.clear();
-  configStore.clear();
-  statusHistoryStore.clear();
   isLoaded = false;
   error = null;
 }
@@ -74,11 +55,6 @@ function clearAll() {
  */
 function clearAllErrors() {
   grantsStore.clearError();
-  actionItemsStore.clearError();
-  reportsStore.clearError();
-  artifactsStore.clearError();
-  configStore.clearError();
-  statusHistoryStore.clearError();
   error = null;
 }
 
@@ -95,30 +71,14 @@ export const dataStore = {
     return isLoaded;
   },
 
-  // Aggregated loading state from all stores
+  // Aggregated loading state
   get anyLoading() {
-    return (
-      isLoading ||
-      grantsStore.isLoading ||
-      actionItemsStore.isLoading ||
-      reportsStore.isLoading ||
-      artifactsStore.isLoading ||
-      configStore.isLoading ||
-      statusHistoryStore.isLoading
-    );
+    return isLoading || grantsStore.isLoading;
   },
 
-  // Aggregated error from all stores
+  // Aggregated error
   get anyError() {
-    return (
-      error ||
-      grantsStore.error ||
-      actionItemsStore.error ||
-      reportsStore.error ||
-      artifactsStore.error ||
-      configStore.error ||
-      statusHistoryStore.error
-    );
+    return error || grantsStore.error;
   },
 
   // Actions
@@ -128,10 +88,5 @@ export const dataStore = {
   clearAllErrors,
 };
 
-// Re-export individual stores for convenience
+// Re-export grants store for convenience
 export { grantsStore } from './grants.svelte.js';
-export { actionItemsStore } from './actionItems.svelte.js';
-export { reportsStore } from './reports.svelte.js';
-export { artifactsStore } from './artifacts.svelte.js';
-export { configStore } from './config.svelte.js';
-export { statusHistoryStore } from './statusHistory.svelte.js';

@@ -1,6 +1,9 @@
 <script>
   import { grantsStore } from '../stores/grants.svelte.js';
-  import { GrantStatus, GrantType, GRANT_STATUS_ORDER } from '../models.js';
+  import { folderStore } from '../stores/folder.svelte.js';
+  import { userStore } from '../stores/user.svelte.js';
+  import { GrantStatus } from '../models.js';
+  import { createGrantFolderStructure } from '../api/drive.js';
 
   // Props
   let {
@@ -13,29 +16,23 @@
   let modalTitle = $derived(isEditing ? 'Edit Grant' : 'New Grant');
 
   // Form state
-  let grantId = $state(grant?.grant_id || '');
-  let title = $state(grant?.title || '');
-  let organization = $state(grant?.organization || '');
-  let contactName = $state(grant?.contact_name || '');
-  let contactEmail = $state(grant?.contact_email || '');
-  let type = $state(grant?.type || GrantType.GRANT);
-  let status = $state(grant?.status || GrantStatus.INITIAL_CONTACT);
-  let amount = $state(grant?.amount || '');
-  let grantYear = $state(grant?.grant_year || new Date().getFullYear());
-  let ecosystem = $state(grant?.ecosystem || '');
-  let categoryAPct = $state(grant?.category_a_pct || 0);
-  let categoryBPct = $state(grant?.category_b_pct || 0);
-  let categoryCPct = $state(grant?.category_c_pct || 0);
-  let categoryDPct = $state(grant?.category_d_pct || 0);
-  let notes = $state(grant?.notes || '');
-
-  // URL fields (usually set later, but allow editing)
-  let proposalDocUrl = $state(grant?.proposal_doc_url || '');
-  let internalNotesUrl = $state(grant?.internal_notes_url || '');
-  let driveFolderUrl = $state(grant?.drive_folder_url || '');
-  let githubRepo = $state(grant?.github_repo || '');
+  let grantId = $state(grant?.ID || '');
+  let title = $state(grant?.Title || '');
+  let organization = $state(grant?.Organization || '');
+  let primaryContact = $state(grant?.Primary_Contact || '');
+  let otherContacts = $state(grant?.Other_Contacts || '');
+  let status = $state(grant?.Status || GrantStatus.INITIAL_CONTACT);
+  let amount = $state(grant?.Amount || '');
+  let year = $state(grant?.Year || new Date().getFullYear());
+  let beneficiary = $state(grant?.Beneficiary || '');
+  let tags = $state(grant?.Tags || '');
+  let categoryAPct = $state(grant?.Cat_A_Percent || 0);
+  let categoryBPct = $state(grant?.Cat_B_Percent || 0);
+  let categoryCPct = $state(grant?.Cat_C_Percent || 0);
+  let categoryDPct = $state(grant?.Cat_D_Percent || 0);
 
   let isSubmitting = $state(false);
+  let isCreatingFolder = $state(false);
   let error = $state('');
 
   // Validation
@@ -52,7 +49,7 @@
     if (isEditing) return true; // Don't check uniqueness when editing
     if (isSubmitting) return true; // Don't recheck during submission (optimistic update adds it)
     if (!grantId.trim()) return true; // Empty is handled by required validation
-    return !grantsStore.grants.some(g => g.grant_id === grantId.trim());
+    return !grantsStore.grants.some(g => g.ID === grantId.trim());
   });
 
   let canSubmit = $derived(
@@ -68,11 +65,11 @@
     const code = organization
       ? organization.substring(0, 4).toUpperCase().replace(/[^A-Z]/g, '')
       : 'XXXX';
-    const year = grantYear || new Date().getFullYear();
+    const currentYear = year || new Date().getFullYear();
     const codename = title
       ? title.split(' ')[0].replace(/[^a-zA-Z]/g, '')
       : 'Project';
-    return `${code}-${year}-${codename}`;
+    return `${code}-${currentYear}-${codename}`;
   }
 
   function handleGenerateId() {
@@ -86,33 +83,58 @@
     error = '';
 
     const grantData = {
-      grant_id: grantId.trim(),
-      title: title.trim(),
-      organization: organization.trim() || null,
-      contact_name: contactName.trim() || null,
-      contact_email: contactEmail.trim() || null,
-      type,
-      status,
-      amount: amount ? parseFloat(amount) : null,
-      grant_year: grantYear ? parseInt(grantYear) : null,
-      ecosystem: ecosystem.trim() || null,
-      category_a_pct: parseFloat(categoryAPct) || 0,
-      category_b_pct: parseFloat(categoryBPct) || 0,
-      category_c_pct: parseFloat(categoryCPct) || 0,
-      category_d_pct: parseFloat(categoryDPct) || 0,
-      notes: notes.trim() || null,
-      proposal_doc_url: proposalDocUrl.trim() || null,
-      internal_notes_url: internalNotesUrl.trim() || null,
-      drive_folder_url: driveFolderUrl.trim() || null,
-      github_repo: githubRepo.trim() || null,
+      ID: grantId.trim(),
+      Title: title.trim(),
+      Organization: organization.trim() || null,
+      Status: status,
+      Amount: amount ? parseFloat(amount) : null,
+      Primary_Contact: primaryContact.trim() || null,
+      Other_Contacts: otherContacts.trim() || null,
+      Year: year ? parseInt(year) : null,
+      Beneficiary: beneficiary.trim() || null,
+      Tags: tags.trim() || null,
+      Cat_A_Percent: parseFloat(categoryAPct) || 0,
+      Cat_B_Percent: parseFloat(categoryBPct) || 0,
+      Cat_C_Percent: parseFloat(categoryCPct) || 0,
+      Cat_D_Percent: parseFloat(categoryDPct) || 0,
+      Folder_URL: null,
+      Proposal_URL: null,
+      Tracker_URL: null,
     };
 
     try {
       let savedGrant;
       if (isEditing) {
-        savedGrant = await grantsStore.update(grant.grant_id, grantData);
+        savedGrant = await grantsStore.update(grant.ID, grantData);
       } else {
+        // Create the grant first
         savedGrant = await grantsStore.create(grantData);
+
+        // If we have a grants folder, create the folder structure
+        if (folderStore.hasGrantsFolder) {
+          isCreatingFolder = true;
+          try {
+            const folderResult = await createGrantFolderStructure(
+              userStore.accessToken,
+              folderStore.grantsFolderId,
+              grantData.ID
+            );
+
+            // Update the grant with folder/doc URLs
+            const updates = {
+              Folder_URL: folderResult.folderUrl,
+              Proposal_URL: folderResult.proposalUrl,
+              Tracker_URL: folderResult.trackerUrl,
+            };
+            savedGrant = await grantsStore.update(grantData.ID, updates);
+          } catch (folderErr) {
+            // Folder creation failed, but grant was created
+            console.error('Failed to create folder structure:', folderErr);
+            // Don't throw - grant exists, just without folders
+          } finally {
+            isCreatingFolder = false;
+          }
+        }
       }
       onSaved?.(savedGrant);
       onClose?.();
@@ -204,27 +226,14 @@
                 </div>
 
                 <div>
-                  <label for="ecosystem" class="block text-sm font-medium text-gray-700 mb-1">Ecosystem</label>
+                  <label for="beneficiary" class="block text-sm font-medium text-gray-700 mb-1">Beneficiary</label>
                   <input
-                    id="ecosystem"
+                    id="beneficiary"
                     type="text"
-                    bind:value={ecosystem}
+                    bind:value={beneficiary}
                     placeholder="e.g., Python, JavaScript"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   />
-                </div>
-
-                <div>
-                  <label for="type" class="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
-                    id="type"
-                    bind:value={type}
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    {#each Object.values(GrantType) as t}
-                      <option value={t}>{t}</option>
-                    {/each}
-                  </select>
                 </div>
 
                 <div>
@@ -234,10 +243,22 @@
                     bind:value={status}
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   >
-                    {#each GRANT_STATUS_ORDER as s}
+                    {#each grantsStore.statusValues as s}
                       <option value={s}>{s}</option>
                     {/each}
                   </select>
+                </div>
+
+                <div>
+                  <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                  <input
+                    id="tags"
+                    type="text"
+                    bind:value={tags}
+                    placeholder="e.g., Python, Security"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                  <p class="mt-1 text-xs text-gray-500">Comma-separated list</p>
                 </div>
 
                 <div>
@@ -254,11 +275,11 @@
                 </div>
 
                 <div>
-                  <label for="grant-year" class="block text-sm font-medium text-gray-700 mb-1">Grant Year</label>
+                  <label for="year" class="block text-sm font-medium text-gray-700 mb-1">Year</label>
                   <input
-                    id="grant-year"
+                    id="year"
                     type="number"
-                    bind:value={grantYear}
+                    bind:value={year}
                     min="2000"
                     max="2100"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
@@ -331,88 +352,26 @@
               <h4 class="text-sm font-medium text-gray-700 mb-3">Contact Information</h4>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label for="contact-name" class="block text-sm font-medium text-gray-700 mb-1">Contact Name</label>
+                  <label for="primary-contact" class="block text-sm font-medium text-gray-700 mb-1">Primary Contact</label>
                   <input
-                    id="contact-name"
+                    id="primary-contact"
                     type="text"
-                    bind:value={contactName}
-                    placeholder="Primary contact"
+                    bind:value={primaryContact}
+                    placeholder="Name or email"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <label for="contact-email" class="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                  <label for="other-contacts" class="block text-sm font-medium text-gray-700 mb-1">Other Contacts</label>
                   <input
-                    id="contact-email"
-                    type="email"
-                    bind:value={contactEmail}
-                    placeholder="email@example.com"
+                    id="other-contacts"
+                    type="text"
+                    bind:value={otherContacts}
+                    placeholder="Additional contacts"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
               </div>
-            </div>
-
-            <!-- Links Section (collapsed by default for new grants) -->
-            <details class="group" open={isEditing && (proposalDocUrl || internalNotesUrl || driveFolderUrl || githubRepo)}>
-              <summary class="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
-                Document Links
-                <span class="text-gray-400 text-xs ml-1">(click to expand)</span>
-              </summary>
-              <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label for="proposal-url" class="block text-sm font-medium text-gray-700 mb-1">Proposal Doc URL</label>
-                  <input
-                    id="proposal-url"
-                    type="url"
-                    bind:value={proposalDocUrl}
-                    placeholder="https://docs.google.com/..."
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label for="notes-url" class="block text-sm font-medium text-gray-700 mb-1">Internal Notes URL</label>
-                  <input
-                    id="notes-url"
-                    type="url"
-                    bind:value={internalNotesUrl}
-                    placeholder="https://docs.google.com/..."
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label for="folder-url" class="block text-sm font-medium text-gray-700 mb-1">Drive Folder URL</label>
-                  <input
-                    id="folder-url"
-                    type="url"
-                    bind:value={driveFolderUrl}
-                    placeholder="https://drive.google.com/..."
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label for="github-url" class="block text-sm font-medium text-gray-700 mb-1">GitHub Repo URL</label>
-                  <input
-                    id="github-url"
-                    type="url"
-                    bind:value={githubRepo}
-                    placeholder="https://github.com/..."
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-            </details>
-
-            <!-- Notes Section -->
-            <div>
-              <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-              <textarea
-                id="notes"
-                bind:value={notes}
-                rows="3"
-                placeholder="Additional notes..."
-                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              ></textarea>
             </div>
           </div>
         </div>
@@ -430,7 +389,7 @@
             disabled={!canSubmit}
             class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Grant')}
+            {isCreatingFolder ? 'Creating folder...' : isSubmitting ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Grant')}
           </button>
         </div>
       </form>

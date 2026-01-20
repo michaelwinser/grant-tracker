@@ -1,7 +1,9 @@
 <script>
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
+  import { folderStore } from '../stores/folder.svelte.js';
 
   let showMenu = $state(false);
+  let showFolderPicker = $state(false);
 
   function handleSwitchSpreadsheet() {
     spreadsheetStore.clear();
@@ -12,6 +14,24 @@
     if (spreadsheetStore.spreadsheetUrl) {
       window.open(spreadsheetStore.spreadsheetUrl, '_blank');
     }
+    showMenu = false;
+  }
+
+  function handleOpenFolder() {
+    if (folderStore.folderUrl) {
+      window.open(folderStore.folderUrl, '_blank');
+    }
+    showMenu = false;
+  }
+
+  function handleSetupFolder() {
+    showFolderPicker = true;
+    showMenu = false;
+  }
+
+  function handleChangeFolder() {
+    folderStore.clear();
+    showFolderPicker = true;
     showMenu = false;
   }
 
@@ -42,14 +62,15 @@
     <div
       role="menu"
       tabindex="-1"
-      class="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
+      class="absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
       onkeydown={(e) => { if (e.key === 'Escape') showMenu = false; }}
       onclick={(e) => e.stopPropagation()}
     >
       <div class="py-1">
+        <!-- Spreadsheet Section -->
         <div class="px-4 py-2 border-b border-gray-100">
+          <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Spreadsheet</p>
           <p class="text-sm font-medium text-gray-900 truncate">{spreadsheetStore.spreadsheetName}</p>
-          <p class="text-xs text-gray-500 truncate">ID: {spreadsheetStore.spreadsheetId}</p>
         </div>
         <button
           onclick={handleOpenSpreadsheet}
@@ -69,6 +90,74 @@
           </svg>
           Switch Spreadsheet
         </button>
+
+        <!-- Folder Section -->
+        <div class="px-4 py-2 border-t border-b border-gray-100 mt-1">
+          <p class="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Drive Folder</p>
+          {#if folderStore.hasFolder}
+            <p class="text-sm font-medium text-gray-900 truncate">{folderStore.folderName}</p>
+          {:else}
+            <p class="text-sm text-gray-500 italic">Not configured</p>
+          {/if}
+        </div>
+        {#if folderStore.hasFolder}
+          <button
+            onclick={handleOpenFolder}
+            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            Open in Google Drive
+          </button>
+          <button
+            onclick={handleChangeFolder}
+            class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            Change Folder
+          </button>
+        {:else}
+          <button
+            onclick={handleSetupFolder}
+            class="w-full text-left px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Set Up Drive Folder
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+  <!-- Folder Picker Modal -->
+  {#if showFolderPicker}
+    <div class="fixed inset-0 z-50 overflow-y-auto">
+      <div class="flex items-center justify-center min-h-screen px-4">
+        <button
+          type="button"
+          class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity cursor-default"
+          onclick={() => showFolderPicker = false}
+          aria-label="Close modal"
+        ></button>
+        <div class="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+          <button
+            onclick={() => showFolderPicker = false}
+            class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            aria-label="Close folder picker"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          {#await import('./FolderPicker.svelte') then { default: FolderPicker }}
+            <FolderPicker />
+          {/await}
+        </div>
       </div>
     </div>
   {/if}

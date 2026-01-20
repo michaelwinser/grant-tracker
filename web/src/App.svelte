@@ -1,6 +1,7 @@
 <script>
   import { userStore } from './lib/stores/user.svelte.js';
   import { spreadsheetStore } from './lib/stores/spreadsheet.svelte.js';
+  import { folderStore } from './lib/stores/folder.svelte.js';
   import { dataStore } from './lib/stores/data.svelte.js';
   import { router } from './lib/router.svelte.js';
   import SignInButton from './lib/components/SignInButton.svelte';
@@ -23,10 +24,11 @@
   // Track which spreadsheet ID we've loaded data for
   let dataLoadedFor = $state(null);
 
-  // Initialize auth and spreadsheet on mount
+  // Initialize auth, spreadsheet, and folder stores on mount
   $effect(() => {
     userStore.initialize();
     spreadsheetStore.initialize();
+    folderStore.initialize();
   });
 
   // Validate stored spreadsheet when user authenticates

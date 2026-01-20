@@ -7,9 +7,10 @@
   const navItems = [
     { path: '/', label: 'Dashboard', route: 'dashboard' },
     { path: '/grants', label: 'Grants', route: 'grants' },
-    { path: '/action-items', label: 'Action Items', route: 'action-items' },
-    { path: '/reports', label: 'Reports', route: 'reports' },
     { path: '/budget', label: 'Budget', route: 'budget' },
+    { path: '/reports', label: 'Reports', route: 'reports' },
+    // Deferred to future phase:
+    // { path: '/action-items', label: 'Action Items', route: 'action-items' },
   ];
 
   function isActive(route) {

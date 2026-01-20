@@ -72,135 +72,70 @@ async function handleApiError(response, operation) {
 
 /**
  * Required sheets and their column headers for Grant Tracker.
+ * Simplified schema - dropdown values come from separate Status/Tags sheets.
  */
 export const SCHEMA = {
   Grants: [
-    'grant_id',
-    'title',
-    'organization',
-    'contact_name',
-    'contact_email',
-    'type',
-    'category_a_pct',
-    'category_b_pct',
-    'category_c_pct',
-    'category_d_pct',
-    'ecosystem',
-    'amount',
-    'grant_year',
-    'status',
-    'proposal_doc_url',
-    'internal_notes_url',
-    'drive_folder_url',
-    'github_repo',
-    'created_at',
-    'updated_at',
-    'status_changed_at',
-    'notes',
+    'ID',
+    'Title',
+    'Organization',
+    'Status',
+    'Amount',
+    'Primary_Contact',
+    'Other_Contacts',
+    'Year',
+    'Beneficiary',
+    'Tags',
+    'Cat_A_Percent',
+    'Cat_B_Percent',
+    'Cat_C_Percent',
+    'Cat_D_Percent',
+    'Folder_URL',
+    'Proposal_URL',
+    'Tracker_URL',
   ],
-  ActionItems: [
-    'item_id',
-    'grant_id',
-    'description',
-    'assignee',
-    'due_date',
-    'status',
-    'source',
-    'created_at',
-    'completed_at',
-  ],
-  Reports: [
-    'report_id',
-    'grant_id',
-    'period',
-    'report_type',
-    'status',
-    'due_date',
-    'received_date',
-    'url',
-    'notes',
-  ],
-  Artifacts: [
-    'artifact_id',
-    'grant_id',
-    'artifact_type',
-    'title',
-    'url',
-    'date',
-    'added_by',
-    'created_at',
-  ],
-  StatusHistory: [
-    'history_id',
-    'grant_id',
-    'from_status',
-    'to_status',
-    'changed_by',
-    'changed_at',
-    'notes',
-  ],
-  Config: ['key', 'value'],
+  Status: ['Status'],
+  Tags: ['Name'],
 };
 
 /**
- * Column types for Tables.
- * Maps sheet name -> column name -> column type.
- * Confirmed working: PERCENT, DROPDOWN
- * TODO: Research correct syntax for NUMBER/DATE types in addTable batchUpdate API
- * DROPDOWN is handled separately via VALIDATIONS.
+ * Default status values for new spreadsheets.
  */
-export const COLUMN_TYPES = {
-  Grants: {
-    category_a_pct: 'PERCENT',
-    category_b_pct: 'PERCENT',
-    category_c_pct: 'PERCENT',
-    category_d_pct: 'PERCENT',
-  },
-};
+export const DEFAULT_STATUS_VALUES = [
+  'Initial Contact',
+  'Meeting',
+  'Proposal Development',
+  'Stakeholder Review',
+  'Approved',
+  'Notification',
+  'Signing',
+  'Disbursement',
+  'Active',
+  'Finished',
+  'Rejected',
+  'Deferred',
+];
 
 /**
- * Data validation rules for dropdown columns.
- * Maps sheet name -> column name -> list of valid values.
+ * Default tag values for new spreadsheets.
  */
-export const VALIDATIONS = {
-  Grants: {
-    type: ['Grant', 'Contract'],
-    status: [
-      'Initial Contact',
-      'Evaluation Meeting',
-      'Proposal Development',
-      'Stakeholder Review',
-      'Approved',
-      'Rejected',
-      'Deferred',
-      'Notification',
-      'Signing',
-      'Disbursement',
-      'Active',
-      'Finished',
-    ],
-  },
-  ActionItems: {
-    status: ['Open', 'Done', 'Cancelled'],
-  },
-  Reports: {
-    report_type: ['Monthly', 'Quarterly', 'Annual'],
-    status: ['Expected', 'Received', 'Overdue'],
-  },
-  Artifacts: {
-    artifact_type: ['Blog Post', 'Meeting Notes', 'Announcement', 'Final Report', 'Other'],
-  },
-};
+export const DEFAULT_TAG_VALUES = [
+  'Python',
+  'Rust',
+  'Security',
+  'Infrastructure',
+];
 
 /**
- * Default configuration values for a new spreadsheet.
+ * Numeric fields that need parsing from formatted strings.
  */
-const DEFAULT_CONFIG = [
-  ['key', 'value'],
-  ['team_members', '[]'],
-  ['categories', '["Category A", "Category B", "Category C", "Category D"]'],
-  ['drive_root_folder_id', ''],
-  ['templates_folder_id', ''],
+export const NUMERIC_FIELDS = [
+  'Amount',
+  'Year',
+  'Cat_A_Percent',
+  'Cat_B_Percent',
+  'Cat_C_Percent',
+  'Cat_D_Percent',
 ];
 
 /**
@@ -225,6 +160,8 @@ export async function getSpreadsheetMetadata(accessToken, spreadsheetId) {
 
 /**
  * Validate that a spreadsheet has the required schema.
+ * Only requires Grants sheet - Status and Tags are optional (can use defaults).
+ * Also ensures all required columns exist (adds missing ones).
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  * @returns {Promise<{valid: boolean, missingSheets: string[], metadata: Object}>}
@@ -236,8 +173,14 @@ export async function validateSchema(accessToken, spreadsheetId) {
     metadata.sheets?.map((s) => s.properties.title) || []
   );
 
-  const requiredSheets = Object.keys(SCHEMA);
+  // Only Grants sheet is strictly required
+  const requiredSheets = ['Grants'];
   const missingSheets = requiredSheets.filter((sheet) => !existingSheets.has(sheet));
+
+  // If valid, ensure all columns exist
+  if (missingSheets.length === 0) {
+    await ensureGrantsColumns(accessToken, spreadsheetId);
+  }
 
   return {
     valid: missingSheets.length === 0,
@@ -251,13 +194,92 @@ export async function validateSchema(accessToken, spreadsheetId) {
 }
 
 /**
+ * Ensure the Grants sheet has all required columns.
+ * Adds any missing columns to the header row.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ */
+async function ensureGrantsColumns(accessToken, spreadsheetId) {
+  // Read current headers from the Grants sheet
+  const response = await fetch(
+    `${SHEETS_API_BASE}/${spreadsheetId}/values/Grants!1:1`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    console.warn('Could not read Grants headers for column check');
+    return;
+  }
+
+  const data = await response.json();
+  const currentHeaders = data.values?.[0] || [];
+  const requiredHeaders = SCHEMA.Grants;
+
+  // Find missing columns
+  const missingHeaders = requiredHeaders.filter(
+    (h) => !currentHeaders.includes(h)
+  );
+
+  if (missingHeaders.length === 0) {
+    return; // All columns exist
+  }
+
+  console.log('Adding missing columns to Grants sheet:', missingHeaders);
+
+  // Calculate the starting column for new headers
+  const startColumn = currentHeaders.length;
+  const endColumn = startColumn + missingHeaders.length;
+  const startColLetter = columnIndexToLetter(startColumn);
+  const endColLetter = columnIndexToLetter(endColumn - 1);
+
+  // Add the missing headers
+  const updateResponse = await fetch(
+    `${SHEETS_API_BASE}/${spreadsheetId}/values/Grants!${startColLetter}1:${endColLetter}1?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: [missingHeaders],
+      }),
+    }
+  );
+
+  if (!updateResponse.ok) {
+    console.warn('Failed to add missing columns:', await updateResponse.text());
+  }
+}
+
+/**
+ * Convert a 0-indexed column number to a letter (0 = A, 25 = Z, 26 = AA).
+ * @param {number} index - Column index (0-indexed)
+ * @returns {string} - Column letter
+ */
+function columnIndexToLetter(index) {
+  let letter = '';
+  let num = index + 1; // Convert to 1-indexed
+  while (num > 0) {
+    const remainder = (num - 1) % 26;
+    letter = String.fromCharCode(65 + remainder) + letter;
+    num = Math.floor((num - 1) / 26);
+  }
+  return letter;
+}
+
+/**
  * Create a new Grant Tracker spreadsheet with all required sheets.
  * @param {string} accessToken - OAuth access token
  * @param {string} title - Spreadsheet title
  * @returns {Promise<{id: string, name: string, url: string}>}
  */
 export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
-  // Build sheet requests with headers
+  // Build sheet definitions with headers
   const sheets = Object.entries(SCHEMA).map(([sheetName, headers]) => ({
     properties: {
       title: sheetName,
@@ -288,9 +310,7 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      properties: {
-        title,
-      },
+      properties: { title },
       sheets,
     }),
   });
@@ -301,9 +321,9 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
 
   const data = await response.json();
 
-  // Apply data validation, freeze headers, and add default config
-  await applySheetFormatting(accessToken, data.spreadsheetId, data.sheets);
-  await addDefaultConfig(accessToken, data.spreadsheetId);
+  // Apply basic formatting (freeze headers) and add default dropdown values
+  await applyBasicFormatting(accessToken, data.spreadsheetId, data.sheets);
+  await addDefaultDropdownValues(accessToken, data.spreadsheetId);
 
   return {
     id: data.spreadsheetId,
@@ -313,90 +333,7 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
 }
 
 /**
- * Create Google Sheets Tables for all data sheets.
- * Tables provide structured data with column types, dropdowns, and validation.
- * @param {string} accessToken - OAuth access token
- * @param {string} spreadsheetId - Spreadsheet ID
- * @param {Object[]} sheets - Array of sheet metadata from create response
- */
-async function applySheetFormatting(accessToken, spreadsheetId, sheets) {
-  const requests = [];
-
-  for (const sheet of sheets) {
-    const sheetName = sheet.properties.title;
-    const sheetId = sheet.properties.sheetId;
-    const headers = SCHEMA[sheetName];
-    const validations = VALIDATIONS[sheetName] || {};
-
-    if (!headers) continue;
-
-    // Build column properties for the Table
-    const columnTypes = COLUMN_TYPES[sheetName] || {};
-    const columnProperties = headers.map((columnName, columnIndex) => {
-      const colDef = {
-        columnIndex,
-        columnName,
-      };
-
-      // Add dropdown type with validation rule if this column has defined values
-      if (validations[columnName]) {
-        colDef.columnType = 'DROPDOWN';
-        colDef.dataValidationRule = {
-          condition: {
-            type: 'ONE_OF_LIST',
-            values: validations[columnName].map((v) => ({ userEnteredValue: v })),
-          },
-        };
-      } else if (columnTypes[columnName]) {
-        // Apply specific column type (DATE, PERCENT, etc.)
-        colDef.columnType = columnTypes[columnName];
-      }
-
-      return colDef;
-    });
-
-    // Create a Table using the addTable request
-    requests.push({
-      addTable: {
-        table: {
-          name: sheetName,
-          range: {
-            sheetId,
-            startRowIndex: 0,
-            endRowIndex: 2, // Header + 1 row minimum for table
-            startColumnIndex: 0,
-            endColumnIndex: headers.length,
-          },
-          columnProperties,
-        },
-      },
-    });
-  }
-
-  if (requests.length === 0) return;
-
-  const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ requests }),
-  });
-
-  if (!response.ok) {
-    // Log the error but don't fail - Tables may not be available in all accounts
-    const errorText = await response.text();
-    console.warn('Failed to create Tables (falling back to basic formatting):', errorText);
-
-    // Fallback: apply basic formatting without Tables
-    await applyBasicFormatting(accessToken, spreadsheetId, sheets);
-  }
-}
-
-/**
- * Fallback formatting when Tables API is not available.
- * Applies data validation and freezes header rows.
+ * Apply basic formatting: freeze header rows, set column widths.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  * @param {Object[]} sheets - Array of sheet metadata
@@ -405,52 +342,18 @@ async function applyBasicFormatting(accessToken, spreadsheetId, sheets) {
   const requests = [];
 
   for (const sheet of sheets) {
-    const sheetName = sheet.properties.title;
     const sheetId = sheet.properties.sheetId;
-    const headers = SCHEMA[sheetName];
-    const validations = VALIDATIONS[sheetName];
-
-    if (!headers) continue;
 
     // Freeze the header row
     requests.push({
       updateSheetProperties: {
         properties: {
           sheetId,
-          gridProperties: {
-            frozenRowCount: 1,
-          },
+          gridProperties: { frozenRowCount: 1 },
         },
         fields: 'gridProperties.frozenRowCount',
       },
     });
-
-    // Add data validation for dropdown columns
-    if (validations) {
-      for (const [columnName, values] of Object.entries(validations)) {
-        const columnIndex = headers.indexOf(columnName);
-        if (columnIndex === -1) continue;
-
-        requests.push({
-          setDataValidation: {
-            range: {
-              sheetId,
-              startRowIndex: 1,
-              startColumnIndex: columnIndex,
-              endColumnIndex: columnIndex + 1,
-            },
-            rule: {
-              condition: {
-                type: 'ONE_OF_LIST',
-                values: values.map((v) => ({ userEnteredValue: v })),
-              },
-              showCustomUi: true,
-              strict: false,
-            },
-          },
-        });
-      }
-    }
   }
 
   if (requests.length === 0) return;
@@ -466,28 +369,36 @@ async function applyBasicFormatting(accessToken, spreadsheetId, sheets) {
 }
 
 /**
- * Add default configuration values to the Config sheet.
+ * Add default values to Status and Tags sheets.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  */
-async function addDefaultConfig(accessToken, spreadsheetId) {
-  const response = await fetch(
-    `${SHEETS_API_BASE}/${spreadsheetId}/values/Config!A1:B${DEFAULT_CONFIG.length}?valueInputOption=USER_ENTERED`,
+async function addDefaultDropdownValues(accessToken, spreadsheetId) {
+  const data = [
     {
-      method: 'PUT',
+      range: 'Status!A2:A',
+      values: DEFAULT_STATUS_VALUES.map((s) => [s]),
+    },
+    {
+      range: 'Tags!A2:A',
+      values: DEFAULT_TAG_VALUES.map((t) => [t]),
+    },
+  ];
+
+  await fetch(
+    `${SHEETS_API_BASE}/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        values: DEFAULT_CONFIG,
+        valueInputOption: 'RAW',
+        data,
       }),
     }
   );
-
-  if (!response.ok) {
-    console.warn('Failed to add default config values');
-  }
 }
 
 /**
@@ -503,9 +414,7 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
   // Add sheets via batchUpdate
   const requests = missingSheets.map((sheetName) => ({
     addSheet: {
-      properties: {
-        title: sheetName,
-      },
+      properties: { title: sheetName },
     },
   }));
 
@@ -535,68 +444,70 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          values: [headers],
-        }),
+        body: JSON.stringify({ values: [headers] }),
       }
     );
   }
 
-  // Get metadata to find sheet IDs, then create Tables
-  const metadata = await getSpreadsheetMetadata(accessToken, spreadsheetId);
-  const newSheets = missingSheets
-    .map((sheetName) => {
-      const sheetInfo = metadata.sheets?.find((s) => s.properties.title === sheetName);
-      return sheetInfo ? { properties: sheetInfo.properties } : null;
-    })
-    .filter(Boolean);
-
-  // Create Tables for the new sheets (reuse the applySheetFormatting logic)
-  await applySheetFormatting(accessToken, spreadsheetId, newSheets);
-
-  // Format header rows (Tables may not support custom header formatting)
-  const formatRequests = [];
-  for (const sheetName of missingSheets) {
-    const sheetInfo = metadata.sheets?.find((s) => s.properties.title === sheetName);
-    if (!sheetInfo) continue;
-
-    const sheetId = sheetInfo.properties.sheetId;
-    const headers = SCHEMA[sheetName];
-
-    formatRequests.push({
-      repeatCell: {
-        range: {
-          sheetId,
-          startRowIndex: 0,
-          endRowIndex: 1,
-          startColumnIndex: 0,
-          endColumnIndex: headers.length,
-        },
-        cell: {
-          userEnteredFormat: {
-            textFormat: { bold: true },
-            backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 },
-          },
-        },
-        fields: 'userEnteredFormat(textFormat,backgroundColor)',
-      },
-    });
+  // Add default values for Status and Tags sheets if created
+  if (missingSheets.includes('Status') || missingSheets.includes('Tags')) {
+    await addDefaultDropdownValues(accessToken, spreadsheetId);
   }
+}
 
-  if (formatRequests.length > 0) {
-    await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ requests: formatRequests }),
-    });
+/**
+ * Read dropdown values from the Status sheet.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ * @returns {Promise<string[]>} - List of status values
+ */
+export async function readStatusValues(accessToken, spreadsheetId) {
+  try {
+    const response = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!A2:A?majorDimension=COLUMNS`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      // Status sheet may not exist, return defaults
+      return DEFAULT_STATUS_VALUES;
+    }
+
+    const data = await response.json();
+    const values = data.values?.[0] || [];
+    return values.length > 0 ? values : DEFAULT_STATUS_VALUES;
+  } catch {
+    return DEFAULT_STATUS_VALUES;
   }
+}
 
-  // Add default config if Config sheet was just created
-  if (missingSheets.includes('Config')) {
-    await addDefaultConfig(accessToken, spreadsheetId);
+/**
+ * Read dropdown values from the Tags sheet.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ * @returns {Promise<string[]>} - List of tag values
+ */
+export async function readTagValues(accessToken, spreadsheetId) {
+  try {
+    const response = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Tags!A2:A?majorDimension=COLUMNS`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      // Tags sheet may not exist, return defaults
+      return DEFAULT_TAG_VALUES;
+    }
+
+    const data = await response.json();
+    const values = data.values?.[0] || [];
+    return values.length > 0 ? values : DEFAULT_TAG_VALUES;
+  } catch {
+    return DEFAULT_TAG_VALUES;
   }
 }
 

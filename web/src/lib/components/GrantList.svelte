@@ -1,7 +1,6 @@
 <script>
   import { grantsStore } from '../stores/grants.svelte.js';
   import { router, navigate } from '../router.svelte.js';
-  import { GrantStatus, GrantType } from '../models.js';
   import StatusBadge from './StatusBadge.svelte';
   import GrantFormModal from './GrantFormModal.svelte';
 
@@ -11,18 +10,17 @@
   // Filter state - initialize from URL query params
   let searchQuery = $state('');
   let statusFilter = $state(router.query.status || '');
-  let typeFilter = $state(router.query.type || '');
   let yearFilter = $state(router.query.year || '');
 
   // Sort state
-  let sortColumn = $state('updated_at');
-  let sortDirection = $state('desc');
+  let sortColumn = $state('ID');
+  let sortDirection = $state('asc');
 
   // Get unique years from grants
   let availableYears = $derived(() => {
     const years = new Set();
     grantsStore.grants.forEach(g => {
-      if (g.grant_year) years.add(g.grant_year);
+      if (g.Year) years.add(g.Year);
     });
     return Array.from(years).sort((a, b) => b - a);
   });
@@ -35,25 +33,22 @@
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(g =>
-        g.title?.toLowerCase().includes(query) ||
-        g.organization?.toLowerCase().includes(query) ||
-        g.grant_id?.toLowerCase().includes(query)
+        g.Title?.toLowerCase().includes(query) ||
+        g.Organization?.toLowerCase().includes(query) ||
+        g.ID?.toLowerCase().includes(query) ||
+        g.Beneficiary?.toLowerCase().includes(query) ||
+        g.Tags?.toLowerCase().includes(query)
       );
     }
 
     // Apply status filter
     if (statusFilter) {
-      result = result.filter(g => g.status === statusFilter);
-    }
-
-    // Apply type filter
-    if (typeFilter) {
-      result = result.filter(g => g.type === typeFilter);
+      result = result.filter(g => g.Status === statusFilter);
     }
 
     // Apply year filter
     if (yearFilter) {
-      result = result.filter(g => g.grant_year === parseInt(yearFilter));
+      result = result.filter(g => g.Year === parseInt(yearFilter));
     }
 
     // Apply sorting
@@ -66,15 +61,9 @@
       if (bVal == null) bVal = '';
 
       // Numeric comparison for amount and year
-      if (sortColumn === 'amount' || sortColumn === 'grant_year') {
+      if (sortColumn === 'Amount' || sortColumn === 'Year') {
         aVal = parseFloat(aVal) || 0;
         bVal = parseFloat(bVal) || 0;
-      }
-
-      // Date comparison
-      if (sortColumn === 'updated_at' || sortColumn === 'created_at') {
-        aVal = new Date(aVal || 0);
-        bVal = new Date(bVal || 0);
       }
 
       if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
@@ -104,31 +93,13 @@
     }).format(amount);
   }
 
-  function formatDate(dateStr) {
-    if (!dateStr) return '—';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      if (diffHours === 0) return 'Just now';
-      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    }
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
-    return date.toLocaleDateString();
-  }
-
   function getPrimaryCategory(grant) {
     // Find the category with highest percentage
     const categories = [
-      { name: 'A', pct: grant.category_a_pct },
-      { name: 'B', pct: grant.category_b_pct },
-      { name: 'C', pct: grant.category_c_pct },
-      { name: 'D', pct: grant.category_d_pct },
+      { name: 'A', pct: grant.Cat_A_Percent },
+      { name: 'B', pct: grant.Cat_B_Percent },
+      { name: 'C', pct: grant.Cat_C_Percent },
+      { name: 'D', pct: grant.Cat_D_Percent },
     ].filter(c => c.pct > 0);
 
     if (categories.length === 0) return null;
@@ -146,7 +117,7 @@
   }
 
   function handleRowClick(grant) {
-    navigate(`/grant/${encodeURIComponent(grant.grant_id)}`);
+    navigate(`/grant/${encodeURIComponent(grant.ID)}`);
   }
 
   function getSortIcon(column) {
@@ -156,7 +127,7 @@
 
   function handleGrantSaved(grant) {
     // Navigate to the new grant's detail page
-    navigate(`/grant/${encodeURIComponent(grant.grant_id)}`);
+    navigate(`/grant/${encodeURIComponent(grant.ID)}`);
   }
 </script>
 
@@ -193,7 +164,7 @@
           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         />
       </div>
-      <div class="w-40">
+      <div class="w-48">
         <label for="status-filter" class="block text-xs font-medium text-gray-500 mb-1">Status</label>
         <select
           id="status-filter"
@@ -201,21 +172,8 @@
           class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
         >
           <option value="">All statuses</option>
-          {#each Object.values(GrantStatus) as status}
+          {#each grantsStore.statusValues as status}
             <option value={status}>{status}</option>
-          {/each}
-        </select>
-      </div>
-      <div class="w-32">
-        <label for="type-filter" class="block text-xs font-medium text-gray-500 mb-1">Type</label>
-        <select
-          id="type-filter"
-          bind:value={typeFilter}
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="">All</option>
-          {#each Object.values(GrantType) as type}
-            <option value={type}>{type}</option>
           {/each}
         </select>
       </div>
@@ -264,51 +222,51 @@
           <tr>
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onclick={() => handleSort('grant_id')}
+              onclick={() => handleSort('ID')}
             >
-              Grant <span class="text-gray-400">{getSortIcon('grant_id')}</span>
+              Grant <span class="text-gray-400">{getSortIcon('ID')}</span>
             </th>
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onclick={() => handleSort('organization')}
+              onclick={() => handleSort('Organization')}
             >
-              Organization <span class="text-gray-400">{getSortIcon('organization')}</span>
+              Organization <span class="text-gray-400">{getSortIcon('Organization')}</span>
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Category
             </th>
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onclick={() => handleSort('amount')}
+              onclick={() => handleSort('Amount')}
             >
-              Amount <span class="text-gray-400">{getSortIcon('amount')}</span>
+              Amount <span class="text-gray-400">{getSortIcon('Amount')}</span>
             </th>
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onclick={() => handleSort('status')}
+              onclick={() => handleSort('Status')}
             >
-              Status <span class="text-gray-400">{getSortIcon('status')}</span>
+              Status <span class="text-gray-400">{getSortIcon('Status')}</span>
             </th>
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onclick={() => handleSort('updated_at')}
+              onclick={() => handleSort('Year')}
             >
-              Updated <span class="text-gray-400">{getSortIcon('updated_at')}</span>
+              Year <span class="text-gray-400">{getSortIcon('Year')}</span>
             </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each filteredGrants() as grant (grant.grant_id)}
+          {#each filteredGrants() as grant (grant.ID)}
             <tr
               class="hover:bg-gray-50 cursor-pointer"
               onclick={() => handleRowClick(grant)}
             >
               <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm font-medium text-indigo-600">{grant.grant_id}</div>
-                <div class="text-xs text-gray-500">{grant.title || '—'}</div>
+                <div class="text-sm font-medium text-indigo-600">{grant.ID}</div>
+                <div class="text-xs text-gray-500">{grant.Title || '—'}</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {grant.organization || '—'}
+                {grant.Organization || '—'}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if getPrimaryCategory(grant)}
@@ -320,13 +278,13 @@
                 {/if}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatAmount(grant.amount)}
+                {formatAmount(grant.Amount)}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <StatusBadge status={grant.status} />
+                <StatusBadge status={grant.Status} />
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {formatDate(grant.updated_at)}
+                {grant.Year || '—'}
               </td>
             </tr>
           {/each}

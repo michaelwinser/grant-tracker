@@ -19,6 +19,9 @@ import {
 // Storage key for cached session
 const SESSION_CACHE_KEY = 'grant_tracker_session';
 
+// Max age for cached session before we skip silent refresh (1 hour)
+const SESSION_MAX_AGE_MS = 60 * 60 * 1000;
+
 // Reactive state
 let user = $state(null);
 let accessToken = $state(null);
@@ -89,23 +92,36 @@ async function initialize() {
     // Try to restore cached session
     const cached = loadCachedSession();
     if (cached?.user) {
-      // Attempt silent token refresh
-      try {
-        const tokenData = await refreshToken();
-        accessToken = tokenData.access_token;
-        user = cached.user;
+      const sessionAge = Date.now() - (cached.timestamp || 0);
 
-        // Schedule automatic refresh
-        scheduleTokenRefresh(
-          tokenData.expires_in,
-          handleTokenRefresh,
-          handleTokenRefreshError
-        );
+      // Only attempt silent refresh if session is recent
+      // Older sessions are more likely to trigger a popup
+      if (sessionAge < SESSION_MAX_AGE_MS) {
+        try {
+          // Pass email as hint to help Google find the right session
+          const tokenData = await refreshToken(cached.user.email);
+          accessToken = tokenData.access_token;
+          user = cached.user;
 
-        console.log('Session restored for:', user.email);
-      } catch (refreshErr) {
-        // Silent refresh failed - user needs to sign in again
-        console.log('Could not restore session, sign-in required');
+          // Update timestamp on successful refresh
+          cacheSession(cached.user, accessToken);
+
+          // Schedule automatic refresh
+          scheduleTokenRefresh(
+            tokenData.expires_in,
+            handleTokenRefresh,
+            handleTokenRefreshError
+          );
+
+          console.log('Session restored for:', user.email);
+        } catch (refreshErr) {
+          // Silent refresh failed - user needs to sign in again
+          console.log('Could not restore session, sign-in required:', refreshErr.message);
+          clearCachedSession();
+        }
+      } else {
+        // Session too old, clear it and require fresh sign-in
+        console.log('Cached session expired, sign-in required');
         clearCachedSession();
       }
     }

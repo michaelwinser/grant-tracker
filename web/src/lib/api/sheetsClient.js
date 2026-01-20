@@ -3,7 +3,7 @@
  * Provides read/write methods with exponential backoff for rate limiting.
  */
 
-import { SheetsApiError, SCHEMA } from './sheets.js';
+import { SheetsApiError, SCHEMA, NUMERIC_FIELDS } from './sheets.js';
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -188,11 +188,12 @@ export function createSheetsClient(accessToken, spreadsheetId) {
 
   /**
    * Read all rows from a sheet.
+   * Uses UNFORMATTED_VALUE to get raw numbers instead of formatted strings.
    * @param {string} sheetName - Name of the sheet
    * @returns {Promise<Object[]>} - Array of row objects
    */
   async function readSheet(sheetName) {
-    const url = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`;
+    const url = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;
     const response = await fetchWithRetry(url, { headers }, `Read ${sheetName}`);
     const data = await response.json();
 
