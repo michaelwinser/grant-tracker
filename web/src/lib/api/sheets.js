@@ -369,9 +369,10 @@ function columnIndexToLetter(index) {
  * Create a new Grant Tracker spreadsheet with all required sheets.
  * @param {string} accessToken - OAuth access token
  * @param {string} title - Spreadsheet title
+ * @param {string} [parentFolderId] - Optional parent folder ID to move the spreadsheet into
  * @returns {Promise<{id: string, name: string, url: string}>}
  */
-export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
+export async function createSpreadsheet(accessToken, title = 'Grant Tracker', parentFolderId = null) {
   // Build sheet definitions with headers
   const sheets = Object.entries(SCHEMA).map(([sheetName, headers]) => ({
     properties: {
@@ -417,6 +418,12 @@ export async function createSpreadsheet(accessToken, title = 'Grant Tracker') {
   // Apply basic formatting (freeze headers) and add default dropdown values
   await applyBasicFormatting(accessToken, data.spreadsheetId, data.sheets);
   await addDefaultDropdownValues(accessToken, data.spreadsheetId);
+
+  // Move to parent folder if specified
+  if (parentFolderId) {
+    const { moveFileToFolder } = await import('./drive.js');
+    await moveFileToFolder(accessToken, data.spreadsheetId, parentFolderId);
+  }
 
   return {
     id: data.spreadsheetId,

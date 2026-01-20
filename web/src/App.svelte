@@ -6,7 +6,7 @@
   import { router } from './lib/router.svelte.js';
   import SignInButton from './lib/components/SignInButton.svelte';
   import NavBar from './lib/components/NavBar.svelte';
-  import SpreadsheetPicker from './lib/components/SpreadsheetPicker.svelte';
+  import FolderPicker from './lib/components/FolderPicker.svelte';
   import Dashboard from './lib/components/Dashboard.svelte';
   import GrantList from './lib/components/GrantList.svelte';
   import GrantDetail from './lib/components/GrantDetail.svelte';
@@ -106,6 +106,7 @@
 
   function handleClearStoredSpreadsheet() {
     spreadsheetStore.clear();
+    folderStore.clear();
     dataStore.clearAll();
     validationResult = null;
     showInitializePrompt = false;
@@ -170,9 +171,9 @@
     <NavBar />
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {#if !spreadsheetStore.hasSpreadsheet || showInitializePrompt}
-        <!-- Spreadsheet selection state -->
-        <SpreadsheetPicker />
+      {#if !folderStore.hasFolder || !spreadsheetStore.hasSpreadsheet || showInitializePrompt}
+        <!-- Folder and spreadsheet setup -->
+        <FolderPicker />
       {:else if spreadsheetStore.isLoading || isValidatingStored}
         <!-- Validating stored spreadsheet -->
         <div class="text-center py-12">

@@ -309,6 +309,42 @@ export async function addFileToFolder(accessToken, fileId, targetFolderId) {
 }
 
 /**
+ * Move a file to a different folder.
+ * Removes the file from all current parent folders and adds it to the target folder.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} fileId - File ID to move
+ * @param {string} targetFolderId - Target folder ID
+ * @returns {Promise<{id: string, name: string, parents: string[]}>}
+ */
+export async function moveFileToFolder(accessToken, fileId, targetFolderId) {
+  // Get current parents first
+  const file = await getFile(accessToken, fileId);
+  const currentParents = file.parents?.join(',') || '';
+
+  const params = new URLSearchParams({
+    addParents: targetFolderId,
+    removeParents: currentParents,
+    fields: 'id, name, parents, webViewLink',
+  });
+
+  const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}?${params}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `Failed to move file to folder (${response.status})`);
+  }
+
+  return response.json();
+}
+
+/**
  * Create a shortcut to a file in a folder.
  * This doesn't move the original - just creates a link.
  * @param {string} accessToken - OAuth access token

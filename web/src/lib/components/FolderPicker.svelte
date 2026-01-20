@@ -1,13 +1,31 @@
 <script>
   import { folderStore } from '../stores/folder.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
+  import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
   import { openFolderPicker } from '../api/picker.js';
-  import { createFolder, findOrCreateFolder, folderExists } from '../api/drive.js';
+  import { createFolder, findOrCreateFolder, listFiles } from '../api/drive.js';
+  import { createSpreadsheet, validateSchema } from '../api/sheets.js';
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
-  let mode = $state('select'); // 'select' | 'creating' | 'setting-up'
+  let mode = $state('select'); // 'select' | 'creating' | 'setting-up' | 'setting-up-spreadsheet'
   let newFolderName = $state('Grant Tracker');
+  let spreadsheetSetupAttempted = $state(false);
+
+  // Handle case where folder exists from localStorage but spreadsheet doesn't
+  $effect(() => {
+    if (
+      folderStore.hasFolder &&
+      folderStore.hasGrantsFolder &&
+      !spreadsheetStore.hasSpreadsheet &&
+      !folderStore.isLoading &&
+      !spreadsheetSetupAttempted &&
+      userStore.isAuthenticated
+    ) {
+      spreadsheetSetupAttempted = true;
+      setupSpreadsheet();
+    }
+  });
 
   async function handleSelectExisting() {
     folderStore.clearError();
@@ -66,9 +84,62 @@
         console.log('Found existing Grants/ subfolder');
       }
 
-      mode = 'select';
+      // Now set up the spreadsheet
+      await setupSpreadsheet();
     } catch (err) {
       folderStore.setError(`Failed to set up Grants folder: ${err.message}`);
+      mode = 'select';
+      folderStore.setLoading(false);
+    }
+  }
+
+  async function setupSpreadsheet() {
+    mode = 'setting-up-spreadsheet';
+
+    try {
+      // Search for existing spreadsheet in the root folder
+      const spreadsheets = await listFiles(userStore.accessToken, folderStore.folderId, {
+        mimeType: 'application/vnd.google-apps.spreadsheet',
+      });
+
+      if (spreadsheets.length > 0) {
+        // Use the first spreadsheet found
+        const existing = spreadsheets[0];
+        console.log('Found existing spreadsheet:', existing.name);
+
+        spreadsheetStore.setSpreadsheet({
+          id: existing.id,
+          name: existing.name,
+          url: existing.webViewLink || `https://docs.google.com/spreadsheets/d/${existing.id}`,
+        });
+
+        // Validate schema - App.svelte will handle validation via effect
+        // but we can mark it validated here if valid
+        try {
+          const result = await validateSchema(userStore.accessToken, existing.id);
+          if (result.valid) {
+            spreadsheetStore.markValidated();
+          }
+        } catch (err) {
+          console.warn('Could not validate existing spreadsheet:', err);
+          // Let App.svelte handle validation retry
+        }
+      } else {
+        // Create new spreadsheet in the root folder
+        console.log('Creating new spreadsheet in folder');
+        const created = await createSpreadsheet(
+          userStore.accessToken,
+          'Grant Tracker',
+          folderStore.folderId
+        );
+
+        spreadsheetStore.setSpreadsheet(created);
+        spreadsheetStore.markValidated(); // New spreadsheet has correct schema
+      }
+
+      mode = 'select';
+    } catch (err) {
+      folderStore.setError(`Failed to set up spreadsheet: ${err.message}`);
       mode = 'select';
     } finally {
       folderStore.setLoading(false);
@@ -77,11 +148,13 @@
 
   function handleChangeFolder() {
     folderStore.clear();
+    spreadsheetStore.clear();
+    spreadsheetSetupAttempted = false;
   }
 </script>
 
-{#if folderStore.hasFolder && folderStore.hasGrantsFolder}
-  <!-- Folder is set up - show info -->
+{#if folderStore.hasFolder && folderStore.hasGrantsFolder && spreadsheetStore.hasSpreadsheet}
+  <!-- Setup complete - show folder info -->
   <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -122,6 +195,8 @@
         Creating folder...
       {:else if mode === 'setting-up'}
         Setting up Grants folder...
+      {:else if mode === 'setting-up-spreadsheet'}
+        Setting up spreadsheet...
       {:else}
         Loading...
       {/if}
