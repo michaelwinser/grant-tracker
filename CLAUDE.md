@@ -86,6 +86,38 @@ See `docs/DESIGN.md` for full schema.
 - Status changes should log to StatusHistory sheet
 - Folder/doc creation can be Apps Script or client-side Drive API
 
+## Development Environment
+
+**IMPORTANT:** This project uses a Docker-based dev environment. All commands run inside a container.
+
+### The `./gt` Command
+
+**Always use `./gt` for development tasks.** Never run `npm`, `node`, or `vite` directly—they won't work outside the container.
+
+| Command | Purpose |
+|---------|---------|
+| `./gt start` | Start dev server (http://localhost:5174) |
+| `./gt stop` | Stop the dev server |
+| `./gt run <cmd>` | Run any command in container (e.g., `./gt run npm run build`) |
+| `./gt build` | Rebuild the Docker image |
+| `./gt shell` | Open a bash shell in the container |
+| `./gt commit "msg" [files]` | Git commit with Co-Authored-By trailer |
+| `./gt status` | Check if container is running |
+| `./gt logs` | View container output |
+
+### Why Containerized?
+
+- Consistent Node.js version (22)
+- Includes Google Cloud CLI for GCP setup scripts
+- No local dependencies required beyond Docker
+
+### Allowed Permissions
+
+The following are pre-approved in `.claude/settings.json`:
+- `./gt *` commands (preferred for all dev tasks)
+- `docker`, `git`, `gh` commands
+- File read/write/edit in the project
+
 ## Getting Started
 
 **First-time setup:** Run `/setup` to start the interactive setup guide. This walks through:
@@ -123,17 +155,14 @@ This helps maintain continuity across sessions and keeps everyone aligned on pro
 
 ## Working Efficiently
 
-When permissions are granted in `.claude/settings.json`, use them without asking for confirmation. For example:
-- If `Bash(./gt *)` is allowed, just commit when work is complete—don't ask "would you like me to commit?"
-- If file edits are allowed, make the edits directly
+When permissions are granted in `.claude/settings.json`, use them without asking for confirmation:
+- Just commit when work is complete—don't ask "would you like me to commit?"
+- Make file edits directly
 - Reserve questions for actual ambiguity about *what* to do, not *whether* to use permitted tools
 
-**For git commits, use `./gt commit`** instead of `git commit` directly. This wrapper:
+**For git commits, use `./gt commit`** instead of `git commit` directly:
 - Automatically appends the Co-Authored-By trailer
-- Matches the `Bash(./gt *)` permission pattern reliably
 - Example: `./gt commit "Add new feature" src/` (stages files and commits)
-
-This keeps the workflow efficient and avoids unnecessary back-and-forth.
 
 ## Design Decisions
 
