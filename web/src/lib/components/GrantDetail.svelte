@@ -453,6 +453,118 @@
   <div class="grid lg:grid-cols-3 gap-6">
     <!-- Main Content -->
     <div class="lg:col-span-2 space-y-6">
+      <!-- Documents -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Documents</h2>
+        {#if hasFolder()}
+          <div class="space-y-3">
+            {#if grant().Folder_URL}
+              <a
+                href={grant().Folder_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                </svg>
+                Open Grant Folder
+              </a>
+            {/if}
+            {#if grant().SOW_URL}
+              <a
+                href={grant().SOW_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+                </svg>
+                Statement of Work
+              </a>
+            {/if}
+            {#if grant().Tracker_URL}
+              <div class="flex items-center justify-between">
+                <a
+                  href={grant().Tracker_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Tracker Doc
+                </a>
+                <button
+                  onclick={handleSyncTracker}
+                  disabled={isSyncingTracker}
+                  class="p-1 text-gray-400 hover:text-indigo-600 disabled:opacity-50"
+                  title="Sync grant data to Tracker doc"
+                >
+                  {#if isSyncingTracker}
+                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                  {:else}
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  {/if}
+                </button>
+              </div>
+              {#if syncError}
+                <p class="text-xs text-red-600 mt-1">{syncError}</p>
+              {/if}
+            {/if}
+            {#if grant().Proposal_URL}
+              <a
+                href={grant().Proposal_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Proposal Doc
+              </a>
+            {/if}
+          </div>
+        {:else}
+          <div class="text-center">
+            <p class="text-sm text-gray-500 mb-3">No Drive folder set up yet.</p>
+            {#if folderStore.hasGrantsFolder}
+              <button
+                onclick={handleCreateFolder}
+                disabled={isCreatingFolder}
+                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-wait"
+              >
+                {#if isCreatingFolder}
+                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  Creating...
+                {:else}
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create Folder
+                {/if}
+              </button>
+              {#if folderError}
+                <p class="text-xs text-red-600 mt-2">{folderError}</p>
+              {/if}
+            {:else}
+              <p class="text-xs text-gray-400">Set up a root folder first from the menu.</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+
       <!-- Tags -->
       {#if parseTags(grant().Tags).length > 0}
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -863,105 +975,6 @@
             </div>
           {/if}
         </dl>
-      </div>
-
-      <!-- Documents -->
-      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 class="text-sm font-semibold text-gray-900 mb-4">Documents</h3>
-        {#if hasFolder()}
-          <div class="space-y-3">
-            {#if grant().Folder_URL}
-              <a
-                href={grant().Folder_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-                Open Folder
-              </a>
-            {/if}
-            {#if grant().Tracker_URL}
-              <div class="flex items-center justify-between">
-                <a
-                  href={grant().Tracker_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
-                >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Tracker Doc
-                </a>
-                <button
-                  onclick={handleSyncTracker}
-                  disabled={isSyncingTracker}
-                  class="p-1 text-gray-400 hover:text-indigo-600 disabled:opacity-50"
-                  title="Sync grant data to Tracker doc"
-                >
-                  {#if isSyncingTracker}
-                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
-                  {:else}
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  {/if}
-                </button>
-              </div>
-              {#if syncError}
-                <p class="text-xs text-red-600 mt-1">{syncError}</p>
-              {/if}
-            {/if}
-            {#if grant().Proposal_URL}
-              <a
-                href={grant().Proposal_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Proposal Doc
-              </a>
-            {/if}
-          </div>
-        {:else}
-          <div class="text-center">
-            <p class="text-sm text-gray-500 mb-3">No Drive folder set up yet.</p>
-            {#if folderStore.hasGrantsFolder}
-              <button
-                onclick={handleCreateFolder}
-                disabled={isCreatingFolder}
-                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-wait"
-              >
-                {#if isCreatingFolder}
-                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
-                  Creating...
-                {:else}
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Create Folder
-                {/if}
-              </button>
-              {#if folderError}
-                <p class="text-xs text-red-600 mt-2">{folderError}</p>
-              {/if}
-            {:else}
-              <p class="text-xs text-gray-400">Set up a root folder first from the menu.</p>
-            {/if}
-          </div>
-        {/if}
       </div>
     </div>
   </div>

@@ -93,6 +93,7 @@ export const SCHEMA = {
     'Folder_URL',
     'Proposal_URL',
     'Tracker_URL',
+    'SOW_URL',
   ],
   ActionItems: [
     'item_id',
