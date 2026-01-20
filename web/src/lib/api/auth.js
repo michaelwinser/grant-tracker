@@ -1,149 +1,123 @@
 /**
- * Google Identity Services authentication module.
- * Handles OAuth token acquisition, refresh, and user info retrieval.
+ * Server-based authentication module.
+ * Uses HTTP-only cookies for refresh tokens and regular cookies for access tokens.
+ * The server handles the OAuth flow with Google.
  */
 
-const SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/userinfo.profile',
-].join(' ');
-
-let tokenClient = null;
 let refreshTimeoutId = null;
 
 /**
- * Initialize the Google Identity Services token client.
- * @param {string} clientId - Google OAuth client ID
- * @returns {Promise<void>}
+ * Get the access token from the cookie.
+ * @returns {string|null} The access token or null if not found
  */
-export function initializeGoogleAuth(clientId) {
-  return new Promise((resolve, reject) => {
-    // Wait for GSI library to load
-    const checkGsi = () => {
-      if (window.google?.accounts?.oauth2) {
-        tokenClient = window.google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope: SCOPES,
-          callback: () => {}, // Will be set during signIn
-        });
-        resolve();
-      } else {
-        setTimeout(checkGsi, 100);
-      }
-    };
-
-    // Timeout after 10 seconds
-    const timeout = setTimeout(() => {
-      reject(new Error('Google Identity Services failed to load'));
-    }, 10000);
-
-    checkGsi();
-    // Clear timeout if resolved
-    const originalResolve = resolve;
-    resolve = () => {
-      clearTimeout(timeout);
-      originalResolve();
-    };
-  });
+export function getAccessToken() {
+  const match = document.cookie.match(/(?:^|; )gt_access_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 /**
- * Trigger the OAuth sign-in flow.
- * @returns {Promise<{access_token: string, expires_in: number}>}
+ * Get user info from the cookie.
+ * @returns {Object|null} User info { email, name, picture } or null
+ */
+export function getUserFromCookie() {
+  const match = document.cookie.match(/(?:^|; )gt_user=([^;]*)/);
+  if (!match) return null;
+
+  try {
+    const decoded = atob(decodeURIComponent(match[1]));
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if the user is authenticated (has valid cookies).
+ * @returns {boolean}
+ */
+export function isAuthenticated() {
+  return getAccessToken() !== null;
+}
+
+/**
+ * Initialize authentication state.
+ * Checks for existing cookies and returns user state.
+ * @returns {Promise<{authenticated: boolean, user: Object|null, accessToken: string|null}>}
+ */
+export async function initializeAuth() {
+  const accessToken = getAccessToken();
+  const user = getUserFromCookie();
+
+  if (accessToken && user) {
+    return {
+      authenticated: true,
+      user,
+      accessToken,
+    };
+  }
+
+  // If we have a refresh token cookie (HttpOnly, can't check directly),
+  // try to refresh the access token
+  try {
+    const tokenData = await refreshToken();
+    const refreshedUser = getUserFromCookie();
+    return {
+      authenticated: true,
+      user: refreshedUser,
+      accessToken: tokenData.access_token,
+    };
+  } catch {
+    // No valid session
+    return {
+      authenticated: false,
+      user: null,
+      accessToken: null,
+    };
+  }
+}
+
+/**
+ * Redirect to sign in.
+ * The server handles the OAuth flow and sets cookies.
  */
 export function signIn() {
-  return new Promise((resolve, reject) => {
-    if (!tokenClient) {
-      reject(new Error('Auth not initialized. Call initializeGoogleAuth first.'));
-      return;
-    }
-
-    tokenClient.callback = (response) => {
-      if (response.error) {
-        reject(new Error(response.error_description || response.error));
-        return;
-      }
-      resolve({
-        access_token: response.access_token,
-        expires_in: response.expires_in,
-      });
-    };
-
-    tokenClient.error_callback = (error) => {
-      if (error.type === 'popup_blocked') {
-        reject(new Error('Please allow popups for this site to sign in.'));
-      } else if (error.type === 'popup_closed') {
-        reject(new Error('Sign-in was cancelled.'));
-      } else {
-        reject(new Error(error.message || 'Sign-in failed'));
-      }
-    };
-
-    tokenClient.requestAccessToken({ prompt: 'consent' });
-  });
+  window.location.href = '/auth/login';
 }
 
 /**
- * Request a new token without user interaction (for refresh).
- * @param {string} [loginHint] - User's email to help Google identify the session
- * @returns {Promise<{access_token: string, expires_in: number}>}
- */
-export function refreshToken(loginHint) {
-  return new Promise((resolve, reject) => {
-    if (!tokenClient) {
-      reject(new Error('Auth not initialized'));
-      return;
-    }
-
-    tokenClient.callback = (response) => {
-      if (response.error) {
-        reject(new Error(response.error_description || response.error));
-        return;
-      }
-      resolve({
-        access_token: response.access_token,
-        expires_in: response.expires_in,
-      });
-    };
-
-    tokenClient.error_callback = (error) => {
-      // Treat popup_closed and popup_blocked as silent failures
-      // (user didn't want to re-auth, or browser blocked it)
-      if (error.type === 'popup_closed' || error.type === 'popup_blocked') {
-        reject(new Error('Silent refresh not available'));
-      } else {
-        reject(new Error(error.message || 'Token refresh failed'));
-      }
-    };
-
-    // Request without prompt to silently refresh
-    // login_hint helps Google find the right session
-    const options = { prompt: '' };
-    if (loginHint) {
-      options.hint = loginHint;
-    }
-    tokenClient.requestAccessToken(options);
-  });
-}
-
-/**
- * Revoke the current access token and sign out.
- * @param {string} accessToken - The token to revoke
+ * Sign out by calling the server logout endpoint.
+ * This clears all auth cookies.
  * @returns {Promise<void>}
  */
-export function signOut(accessToken) {
-  return new Promise((resolve) => {
-    cancelTokenRefresh();
+export async function signOut() {
+  cancelTokenRefresh();
 
-    if (accessToken && window.google?.accounts?.oauth2) {
-      window.google.accounts.oauth2.revoke(accessToken, () => {
-        resolve();
-      });
-    } else {
-      resolve();
-    }
+  try {
+    await fetch('/auth/logout', { method: 'POST' });
+  } catch {
+    // Ignore errors - cookies might already be cleared
+  }
+
+  // Clear any client-side state and redirect
+  window.location.href = '/';
+}
+
+/**
+ * Refresh the access token using the server.
+ * The server uses the HttpOnly refresh_token cookie.
+ * @returns {Promise<{access_token: string, expires_in: number}>}
+ */
+export async function refreshToken() {
+  const response = await fetch('/auth/refresh', {
+    method: 'POST',
+    credentials: 'same-origin',
   });
+
+  if (!response.ok) {
+    throw new Error('Token refresh failed');
+  }
+
+  return response.json();
 }
 
 /**
@@ -205,4 +179,11 @@ export function cancelTokenRefresh() {
     clearTimeout(refreshTimeoutId);
     refreshTimeoutId = null;
   }
+}
+
+// Legacy exports for compatibility - these are no longer needed with server auth
+// but kept to avoid breaking imports during transition
+export function initializeGoogleAuth() {
+  // No-op - server handles OAuth
+  return Promise.resolve();
 }

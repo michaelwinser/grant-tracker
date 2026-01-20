@@ -1,26 +1,18 @@
 /**
  * User authentication state store using Svelte 5 runes.
- * Manages user session, tokens, and team member validation.
- *
- * Credentials are cached in localStorage for persistence across browser sessions.
- * On page load, attempts silent token refresh to restore session.
+ * Manages user session using server-based OAuth with cookies.
  */
 
 import {
-  initializeGoogleAuth,
+  initializeAuth,
   signIn as authSignIn,
   signOut as authSignOut,
-  getUserInfo,
+  getAccessToken,
+  getUserFromCookie,
+  refreshToken,
   scheduleTokenRefresh,
   cancelTokenRefresh,
-  refreshToken,
 } from '../api/auth.js';
-
-// Storage key for cached session
-const SESSION_CACHE_KEY = 'grant_tracker_session';
-
-// Max age for cached session before we skip silent refresh (7 days)
-const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Reactive state
 let user = $state(null);
@@ -31,157 +23,62 @@ let error = $state(null);
 // Derived state
 const isAuthenticated = $derived(user !== null && accessToken !== null);
 
-// Client ID from environment
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
-/**
- * Save session to localStorage.
- */
-function cacheSession(userInfo, token) {
-  try {
-    localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
-      user: userInfo,
-      timestamp: Date.now(),
-    }));
-  } catch (e) {
-    // localStorage might be unavailable (private browsing, etc.)
-    console.warn('Could not cache session:', e);
-  }
-}
-
-/**
- * Load cached session from localStorage.
- */
-function loadCachedSession() {
-  try {
-    const cached = localStorage.getItem(SESSION_CACHE_KEY);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (e) {
-    console.warn('Could not load cached session:', e);
-  }
-  return null;
-}
-
-/**
- * Clear cached session from localStorage.
- */
-function clearCachedSession() {
-  try {
-    localStorage.removeItem(SESSION_CACHE_KEY);
-  } catch (e) {
-    // Ignore errors
-  }
-}
-
 /**
  * Initialize the auth system.
- * Loads GSI library and attempts to restore cached session.
+ * Checks for existing session via cookies and attempts token refresh if needed.
  */
 async function initialize() {
   isLoading = true;
   error = null;
 
   try {
-    if (!clientId) {
-      throw new Error('Missing VITE_GOOGLE_CLIENT_ID in environment');
-    }
-    await initializeGoogleAuth(clientId);
+    const authState = await initializeAuth();
 
-    // Try to restore cached session
-    const cached = loadCachedSession();
-    if (cached?.user) {
-      const sessionAge = Date.now() - (cached.timestamp || 0);
+    if (authState.authenticated) {
+      user = authState.user;
+      accessToken = authState.accessToken;
 
-      // Only attempt silent refresh if session is recent
-      // Older sessions are more likely to trigger a popup
-      if (sessionAge < SESSION_MAX_AGE_MS) {
-        try {
-          // Pass email as hint to help Google find the right session
-          const tokenData = await refreshToken(cached.user.email);
-          accessToken = tokenData.access_token;
-          user = cached.user;
+      // Schedule automatic token refresh
+      // Default to 1 hour if we don't know the expiry
+      scheduleTokenRefresh(
+        3600,
+        handleTokenRefresh,
+        handleTokenRefreshError
+      );
 
-          // Update timestamp on successful refresh
-          cacheSession(cached.user, accessToken);
-
-          // Schedule automatic refresh
-          scheduleTokenRefresh(
-            tokenData.expires_in,
-            handleTokenRefresh,
-            handleTokenRefreshError
-          );
-
-          console.log('Session restored for:', user.email);
-        } catch (refreshErr) {
-          // Silent refresh failed - user needs to sign in again
-          console.log('Could not restore session, sign-in required:', refreshErr.message);
-          clearCachedSession();
-        }
-      } else {
-        // Session too old, clear it and require fresh sign-in
-        console.log('Cached session expired, sign-in required');
-        clearCachedSession();
-      }
+      console.log('Session restored for:', user?.email);
+    } else {
+      user = null;
+      accessToken = null;
     }
   } catch (err) {
+    console.error('Auth initialization error:', err);
     error = err.message;
+    user = null;
+    accessToken = null;
   } finally {
     isLoading = false;
   }
 }
 
 /**
- * Sign in with Google.
- * Fetches user info and caches session for persistence.
+ * Sign in with Google via server redirect.
  */
-async function signIn() {
-  isLoading = true;
-  error = null;
-
-  try {
-    const tokenData = await authSignIn();
-    accessToken = tokenData.access_token;
-
-    // Fetch user profile
-    const userInfo = await getUserInfo(accessToken);
-    user = userInfo;
-
-    // Cache session for page refresh persistence
-    cacheSession(userInfo, accessToken);
-
-    // Schedule automatic token refresh
-    scheduleTokenRefresh(
-      tokenData.expires_in,
-      handleTokenRefresh,
-      handleTokenRefreshError
-    );
-
-    return userInfo;
-  } catch (err) {
-    error = err.message;
-    accessToken = null;
-    user = null;
-    throw err;
-  } finally {
-    isLoading = false;
-  }
+function signIn() {
+  authSignIn();
 }
 
 /**
  * Sign out and clear all auth state.
  */
 async function signOut() {
-  try {
-    await authSignOut(accessToken);
-  } finally {
-    cancelTokenRefresh();
-    clearCachedSession();
-    user = null;
-    accessToken = null;
-    error = null;
-  }
+  cancelTokenRefresh();
+  user = null;
+  accessToken = null;
+  error = null;
+
+  // This will redirect to / after clearing cookies
+  await authSignOut();
 }
 
 /**
@@ -225,15 +122,22 @@ function clearError() {
  */
 function handleTokenRefresh(tokenData) {
   accessToken = tokenData.access_token;
+  // Also update user from cookie in case it was refreshed
+  const cookieUser = getUserFromCookie();
+  if (cookieUser) {
+    user = cookieUser;
+  }
 }
 
 /**
  * Handle token refresh failure.
  */
 function handleTokenRefreshError(err) {
-  // Token refresh failed silently - user will need to re-authenticate
-  // on next API call. Don't clear state yet to allow graceful handling.
   console.warn('Token refresh failed:', err.message);
+  // Token refresh failed - user will need to re-authenticate
+  // Clear state to trigger sign-in
+  user = null;
+  accessToken = null;
 }
 
 // Export the store interface

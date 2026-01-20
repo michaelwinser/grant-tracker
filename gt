@@ -1,60 +1,76 @@
 #!/bin/bash
 set -e
 
-IMAGE_NAME="grant-tracker-dev"
+IMAGE_NAME="grant-tracker"
 CONTAINER_NAME="grant-tracker"
+DEV_IMAGE_NAME="grant-tracker-dev"
 
 usage() {
     echo "Usage: ./gt <command>"
     echo ""
     echo "Commands:"
-    echo "  build       Rebuild the dev container"
-    echo "  start       Start the dev server (port 5174)"
+    echo "  build       Build the production container"
+    echo "  start       Start the app (port 8080)"
     echo "  stop        Stop the running container"
-    echo "  run <cmd>   Run a command in the container"
-    echo "  shell       Open a shell in the container"
     echo "  logs        Show container logs"
     echo "  status      Show container status"
+    echo ""
+    echo "  dev         Start Vite dev server with hot reload (port 5174)"
+    echo "  dev-build   Rebuild the dev container"
     echo ""
     echo "  commit <msg> [files...]  Git commit with Co-Authored-By trailer"
     echo ""
     echo "  gcp setup   Create GCP project and enable APIs"
     echo "  gcp oauth   Configure OAuth credentials"
     echo "  gcp auth    Authenticate with Google Cloud"
+    echo "  gcp deploy  Deploy to Cloud Run"
     echo ""
     echo "Examples:"
-    echo "  ./gt build"
-    echo "  ./gt start"
-    echo "  ./gt run npm run build"
+    echo "  ./gt build && ./gt start"
     echo "  ./gt commit \"Add new feature\" src/"
-    echo "  ./gt gcp setup"
+    echo "  ./gt gcp deploy"
 }
 
+# Build production container
 build() {
-    echo "Building container..."
-    docker build -t "$IMAGE_NAME" -f .devcontainer/Dockerfile .
+    echo "Building production container..."
+    docker build -t "$IMAGE_NAME" -f Dockerfile .
+    echo "Build complete. Run './gt start' to start the app."
 }
 
+# Start production container
 start() {
     if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
         echo "Container already running. Use './gt stop' first or './gt logs' to see output."
         exit 1
     fi
 
+    # Check if image exists
+    if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Image not found. Building first..."
+        build
+    fi
+
     # Remove stopped container if exists
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
-    echo "Starting dev server on http://localhost:5174"
-    # Use -it only if we have a TTY
-    local tty_flags=""
-    if [ -t 0 ]; then
-        tty_flags="-it"
+    # Load environment from .env if it exists
+    local env_file=""
+    if [ -f .env ]; then
+        env_file="--env-file .env"
+    elif [ -f .env.local ]; then
+        env_file="--env-file .env.local"
     fi
-    docker run --rm $tty_flags \
+
+    echo "Starting app on http://localhost:8080"
+    docker run --rm -d \
         --name "$CONTAINER_NAME" \
-        -p 5174:5174 \
-        -v "$(pwd)":/workspace \
+        -p 8080:8080 \
+        $env_file \
+        -e REDIRECT_URI=http://localhost:8080/auth/callback \
         "$IMAGE_NAME"
+
+    echo "Container started. Use './gt logs' to see output."
 }
 
 stop() {
@@ -64,37 +80,6 @@ stop() {
     else
         echo "Container not running."
     fi
-}
-
-run_cmd() {
-    if [ $# -eq 0 ]; then
-        echo "Error: No command specified"
-        echo "Usage: ./gt run <command>"
-        exit 1
-    fi
-    # Use -it only if we have a TTY
-    local tty_flags=""
-    if [ -t 0 ]; then
-        tty_flags="-it"
-    fi
-    docker run --rm $tty_flags \
-        -v "$(pwd)":/workspace \
-        "$IMAGE_NAME" \
-        "$@"
-}
-
-shell() {
-    # Use -it only if we have a TTY
-    # Starts at /workspace (project root) for access to all directories
-    local tty_flags=""
-    if [ -t 0 ]; then
-        tty_flags="-it"
-    fi
-    docker run --rm $tty_flags \
-        -v "$(pwd)":/workspace \
-        -w /workspace \
-        "$IMAGE_NAME" \
-        /bin/bash
 }
 
 logs() {
@@ -114,8 +99,41 @@ status() {
     fi
 }
 
+# Dev mode: Vite hot reload (for frontend development)
+dev() {
+    local dev_container="grant-tracker-dev-server"
+
+    if docker ps -q -f name="$dev_container" | grep -q .; then
+        echo "Dev container already running. Use 'docker stop $dev_container' first."
+        exit 1
+    fi
+
+    # Check if dev image exists
+    if ! docker image inspect "$DEV_IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Dev image not found. Building first..."
+        dev_build
+    fi
+
+    docker rm -f "$dev_container" 2>/dev/null || true
+
+    echo "Starting Vite dev server on http://localhost:5174"
+    local tty_flags=""
+    if [ -t 0 ]; then
+        tty_flags="-it"
+    fi
+    docker run --rm $tty_flags \
+        --name "$dev_container" \
+        -p 5174:5174 \
+        -v "$(pwd)":/workspace \
+        "$DEV_IMAGE_NAME"
+}
+
+dev_build() {
+    echo "Building dev container..."
+    docker build -t "$DEV_IMAGE_NAME" -f .devcontainer/Dockerfile .
+}
+
 # Git commit with automatic Co-Authored-By trailer
-# Usage: ./gt commit "message" [files...]
 commit() {
     if [ $# -eq 0 ]; then
         echo "Error: No commit message specified"
@@ -151,8 +169,11 @@ gcp() {
             gcp_run /workspace/scripts/gcp-oauth.sh
             ;;
         auth)
-            shift  # remove 'auth' from args
+            shift
             gcp_auth "$@"
+            ;;
+        deploy)
+            gcp_deploy
             ;;
         "")
             echo "Usage: ./gt gcp <subcommand>"
@@ -161,6 +182,7 @@ gcp() {
             echo "  setup   Create GCP project and enable APIs"
             echo "  oauth   Configure OAuth credentials"
             echo "  auth    Authenticate with Google Cloud"
+            echo "  deploy  Deploy to Cloud Run"
             ;;
         *)
             echo "Unknown gcp subcommand: $subcmd"
@@ -169,7 +191,6 @@ gcp() {
     esac
 }
 
-# Handle GCP authentication - requires interactive terminal
 gcp_auth() {
     if [ ! -t 0 ]; then
         echo "GCP authentication requires an interactive terminal."
@@ -179,24 +200,19 @@ gcp_auth() {
         exit 1
     fi
 
-    # Ensure .gcloud directory exists
     mkdir -p "$(pwd)/.gcloud"
 
     docker run --rm -it \
         -v "$(pwd)":/workspace \
         -v "$(pwd)/.gcloud":/root/.config/gcloud \
         -w /workspace \
-        "$IMAGE_NAME" \
+        "$DEV_IMAGE_NAME" \
         gcloud auth login --no-launch-browser
 }
 
-# Run a command in the container with gcloud credentials from local .gcloud directory
-# Uses /workspace as workdir (not /workspace/web) for access to scripts/
 gcp_run() {
-    # Ensure .gcloud directory exists
     mkdir -p "$(pwd)/.gcloud"
 
-    # Use -it only if we have a TTY
     local tty_flags=""
     if [ -t 0 ]; then
         tty_flags="-it"
@@ -205,8 +221,54 @@ gcp_run() {
         -v "$(pwd)":/workspace \
         -v "$(pwd)/.gcloud":/root/.config/gcloud \
         -w /workspace \
-        "$IMAGE_NAME" \
+        "$DEV_IMAGE_NAME" \
         "$@"
+}
+
+gcp_deploy() {
+    echo "Deploying to Cloud Run..."
+
+    # Check for required environment
+    if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
+        if [ -f .env ]; then
+            source .env
+        fi
+    fi
+
+    if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
+        echo "Error: GOOGLE_CLOUD_PROJECT not set"
+        echo "Set it in .env or export it: export GOOGLE_CLOUD_PROJECT=your-project-id"
+        exit 1
+    fi
+
+    local region="${GOOGLE_CLOUD_REGION:-us-central1}"
+    local service_name="grant-tracker"
+    local image_url="gcr.io/$GOOGLE_CLOUD_PROJECT/$service_name"
+
+    echo "Project: $GOOGLE_CLOUD_PROJECT"
+    echo "Region: $region"
+    echo "Image: $image_url"
+    echo ""
+
+    # Build and push
+    echo "Building and pushing image..."
+    docker build -t "$image_url" -f Dockerfile .
+    docker push "$image_url"
+
+    # Deploy to Cloud Run
+    echo "Deploying to Cloud Run..."
+    gcloud run deploy "$service_name" \
+        --image "$image_url" \
+        --region "$region" \
+        --platform managed \
+        --allow-unauthenticated \
+        --set-env-vars "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" \
+        --set-secrets "GOOGLE_CLIENT_SECRET=google-client-secret:latest"
+
+    echo ""
+    echo "Deployment complete!"
+    echo "Don't forget to update REDIRECT_URI in Cloud Run environment variables"
+    echo "to match your Cloud Run URL: https://<service-url>/auth/callback"
 }
 
 case "${1:-}" in
@@ -219,18 +281,17 @@ case "${1:-}" in
     stop)
         stop
         ;;
-    run)
-        shift
-        run_cmd "$@"
-        ;;
-    shell)
-        shell
-        ;;
     logs)
         logs
         ;;
     status)
         status
+        ;;
+    dev)
+        dev
+        ;;
+    dev-build)
+        dev_build
         ;;
     commit)
         shift
