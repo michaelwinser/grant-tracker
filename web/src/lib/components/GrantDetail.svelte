@@ -7,7 +7,7 @@
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
   import GrantFormModal from './GrantFormModal.svelte';
-  import { createGrantFolderStructure, listFiles, addFileToFolder, findFolder } from '../api/drive.js';
+  import { createGrantFolderStructure, listFiles, addFileToFolder, findFolder, copyFile, createShortcut } from '../api/drive.js';
   import { openFilePicker, openFolderPicker } from '../api/picker.js';
   import { syncGrantToTrackerDoc } from '../api/docs.js';
   import { readApprovers } from '../api/sheets.js';
@@ -43,6 +43,13 @@
   let isAddingAttachment = $state(false);
   let isAddingReport = $state(false);
   let addFileError = $state(null);
+
+  // File conflict prompt state (when add-parent fails due to org policy)
+  let showFileConflictPrompt = $state(false);
+  let conflictFile = $state(null); // { id, name }
+  let conflictTargetFolderId = $state(null);
+  let conflictContext = $state(null); // 'attachment' | 'report'
+  let isResolvingConflict = $state(false);
 
   // Action items state
   let syncMessage = $state(null);
@@ -329,14 +336,27 @@
 
       if (files && files.length > 0) {
         // For uploaded files, they're already in the folder
-        // For selected existing files, move them to the folder
+        // For selected existing files, try to add them to the folder
         for (const file of files) {
           // Check if file is already in the grant folder
           const fileDetails = await listFiles(userStore.accessToken, folderId);
           const alreadyInFolder = fileDetails.some(f => f.id === file.id);
 
           if (!alreadyInFolder) {
-            await addFileToFolder(userStore.accessToken, file.id, folderId);
+            try {
+              await addFileToFolder(userStore.accessToken, file.id, folderId);
+            } catch (err) {
+              // Check if this is a "multiple parents not allowed" error
+              if (isMultipleParentsError(err)) {
+                // Show prompt to let user choose copy or link
+                conflictFile = { id: file.id, name: file.name };
+                conflictTargetFolderId = folderId;
+                conflictContext = 'attachment';
+                showFileConflictPrompt = true;
+                return; // Exit early, user will resolve via prompt
+              }
+              throw err; // Re-throw other errors
+            }
           }
         }
 
@@ -348,6 +368,11 @@
     } finally {
       isAddingAttachment = false;
     }
+  }
+
+  function isMultipleParentsError(err) {
+    const msg = err.message?.toLowerCase() || '';
+    return msg.includes('parent') || msg.includes('multiple') || msg.includes('shared drive');
   }
 
   async function handleAddReport() {
@@ -366,14 +391,27 @@
 
       if (files && files.length > 0) {
         // For uploaded files, they're already in the folder
-        // For selected existing files, move them to the Reports folder
+        // For selected existing files, try to add them to the Reports folder
         for (const file of files) {
           // Check if file is already in the reports folder
           const fileDetails = await listFiles(userStore.accessToken, reportsFolderId);
           const alreadyInFolder = fileDetails.some(f => f.id === file.id);
 
           if (!alreadyInFolder) {
-            await addFileToFolder(userStore.accessToken, file.id, reportsFolderId);
+            try {
+              await addFileToFolder(userStore.accessToken, file.id, reportsFolderId);
+            } catch (err) {
+              // Check if this is a "multiple parents not allowed" error
+              if (isMultipleParentsError(err)) {
+                // Show prompt to let user choose copy or link
+                conflictFile = { id: file.id, name: file.name };
+                conflictTargetFolderId = reportsFolderId;
+                conflictContext = 'report';
+                showFileConflictPrompt = true;
+                return; // Exit early, user will resolve via prompt
+              }
+              throw err; // Re-throw other errors
+            }
           }
         }
 
@@ -385,6 +423,44 @@
     } finally {
       isAddingReport = false;
     }
+  }
+
+  async function handleConflictChoice(choice) {
+    if (!conflictFile || !conflictTargetFolderId) return;
+
+    isResolvingConflict = true;
+    addFileError = null;
+
+    try {
+      if (choice === 'copy') {
+        await copyFile(userStore.accessToken, conflictFile.id, conflictTargetFolderId);
+      } else if (choice === 'link') {
+        await createShortcut(userStore.accessToken, conflictFile.id, conflictTargetFolderId);
+      }
+
+      // Refresh the appropriate list
+      const currentGrant = grant();
+      if (conflictContext === 'attachment') {
+        await loadAttachments(currentGrant);
+      } else if (conflictContext === 'report' && reportsFolderId) {
+        await loadReports(reportsFolderId);
+      }
+    } catch (err) {
+      addFileError = err.message;
+    } finally {
+      isResolvingConflict = false;
+      showFileConflictPrompt = false;
+      conflictFile = null;
+      conflictTargetFolderId = null;
+      conflictContext = null;
+    }
+  }
+
+  function cancelConflictPrompt() {
+    showFileConflictPrompt = false;
+    conflictFile = null;
+    conflictTargetFolderId = null;
+    conflictContext = null;
   }
 
   // Get action items for this grant
@@ -1088,5 +1164,86 @@
       onClose={() => showEditModal = false}
       onSaved={() => showEditModal = false}
     />
+  {/if}
+
+  <!-- File Conflict Prompt Modal -->
+  {#if showFileConflictPrompt && conflictFile}
+    <div class="fixed inset-0 z-50 overflow-y-auto">
+      <div class="flex min-h-full items-center justify-center p-4">
+        <!-- Backdrop -->
+        <button
+          type="button"
+          class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity cursor-default"
+          onclick={cancelConflictPrompt}
+          aria-label="Close dialog"
+        ></button>
+
+        <!-- Modal -->
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div class="mb-4">
+            <div class="flex items-center gap-3 mb-2">
+              <div class="flex-shrink-0 w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+                <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 class="text-lg font-semibold text-gray-900">Can't Add File Directly</h3>
+            </div>
+            <p class="text-sm text-gray-600 mt-2">
+              Your organization's Drive settings don't allow files to appear in multiple folders.
+              How would you like to add <strong class="font-medium">{conflictFile.name}</strong>?
+            </p>
+          </div>
+
+          <div class="space-y-3">
+            <button
+              onclick={() => handleConflictChoice('link')}
+              disabled={isResolvingConflict}
+              class="w-full flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 text-left disabled:opacity-50"
+            >
+              <svg class="w-5 h-5 text-blue-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              <div>
+                <p class="font-medium text-gray-900">Create a shortcut</p>
+                <p class="text-xs text-gray-500 mt-0.5">Links to the original file. Changes to the original will be reflected here.</p>
+              </div>
+            </button>
+
+            <button
+              onclick={() => handleConflictChoice('copy')}
+              disabled={isResolvingConflict}
+              class="w-full flex items-start gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 text-left disabled:opacity-50"
+            >
+              <svg class="w-5 h-5 text-green-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <div>
+                <p class="font-medium text-gray-900">Make a copy</p>
+                <p class="text-xs text-gray-500 mt-0.5">Creates an independent copy. Changes to the original won't affect this copy.</p>
+              </div>
+            </button>
+          </div>
+
+          {#if isResolvingConflict}
+            <div class="mt-4 flex items-center justify-center gap-2 text-sm text-gray-500">
+              <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Adding file...
+            </div>
+          {/if}
+
+          <button
+            onclick={cancelConflictPrompt}
+            disabled={isResolvingConflict}
+            class="mt-4 w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   {/if}
 {/if}

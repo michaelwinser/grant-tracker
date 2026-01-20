@@ -345,6 +345,48 @@ export async function moveFileToFolder(accessToken, fileId, targetFolderId) {
 }
 
 /**
+ * Copy a file to a folder.
+ * Creates a new copy of the file in the target folder.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} fileId - File ID to copy
+ * @param {string} targetFolderId - Target folder ID
+ * @param {string} [newName] - Optional new name for the copy (defaults to original name)
+ * @returns {Promise<{id: string, name: string, webViewLink: string}>}
+ */
+export async function copyFile(accessToken, fileId, targetFolderId, newName = null) {
+  // Get original file name if no new name provided
+  let name = newName;
+  if (!name) {
+    const file = await getFile(accessToken, fileId);
+    name = file.name;
+  }
+
+  const response = await fetch(`${DRIVE_API_BASE}/files/${fileId}/copy`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      parents: [targetFolderId],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error?.message || `Failed to copy file (${response.status})`);
+  }
+
+  const data = await response.json();
+  return {
+    id: data.id,
+    name: data.name,
+    webViewLink: data.webViewLink,
+  };
+}
+
+/**
  * Create a shortcut to a file in a folder.
  * This doesn't move the original - just creates a link.
  * @param {string} accessToken - OAuth access token
