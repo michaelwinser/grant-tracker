@@ -7,8 +7,8 @@
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
   import GrantFormModal from './GrantFormModal.svelte';
-  import { createGrantFolderStructure, listFiles, addFileToFolder } from '../api/drive.js';
-  import { openFilePicker } from '../api/picker.js';
+  import { createGrantFolderStructure, listFiles, addFileToFolder, findFolder } from '../api/drive.js';
+  import { openFilePicker, openFolderPicker } from '../api/picker.js';
   import { syncGrantToTrackerDoc } from '../api/docs.js';
   import { readApprovers } from '../api/sheets.js';
   import { ActionItemStatus } from '../models.js';
@@ -22,6 +22,9 @@
   let statusError = $state(null);
   let isCreatingFolder = $state(false);
   let folderError = $state(null);
+  let isSearchingFolder = $state(false);
+  let folderSearchComplete = $state(false);
+  let isLinkingFolder = $state(false);
   let isSyncingTracker = $state(false);
   let syncError = $state(null);
 
@@ -119,6 +122,76 @@
       loadAttachments(currentGrant);
     }
   });
+
+  // Auto-find folder when grant has no Folder_URL
+  $effect(() => {
+    const currentGrant = grant();
+    if (
+      currentGrant &&
+      !currentGrant.Folder_URL &&
+      !folderSearchComplete &&
+      !isSearchingFolder &&
+      folderStore.hasGrantsFolder &&
+      userStore.accessToken
+    ) {
+      autoFindFolder(currentGrant);
+    }
+  });
+
+  // Reset search state when navigating to a different grant
+  $effect(() => {
+    const grantId = router.params.id;
+    // Reset when grant ID changes
+    folderSearchComplete = false;
+    isSearchingFolder = false;
+    folderError = null;
+  });
+
+  async function autoFindFolder(currentGrant) {
+    isSearchingFolder = true;
+    folderError = null;
+
+    try {
+      const found = await findFolder(
+        userStore.accessToken,
+        folderStore.grantsFolderId,
+        currentGrant.ID
+      );
+
+      if (found) {
+        // Found the folder - update the grant
+        const folderUrl = `https://drive.google.com/drive/folders/${found.id}`;
+        await grantsStore.update(currentGrant.ID, { Folder_URL: folderUrl });
+      }
+    } catch (err) {
+      console.warn('Failed to auto-find folder:', err);
+      // Don't show error to user - this is a best-effort search
+    } finally {
+      isSearchingFolder = false;
+      folderSearchComplete = true;
+    }
+  }
+
+  async function handleLinkFolder() {
+    const currentGrant = grant();
+    if (!currentGrant) return;
+
+    isLinkingFolder = true;
+    folderError = null;
+
+    try {
+      const folder = await openFolderPicker(userStore.accessToken, clientId);
+
+      if (folder) {
+        // Update the grant with the selected folder URL
+        await grantsStore.update(currentGrant.ID, { Folder_URL: folder.url });
+      }
+    } catch (err) {
+      folderError = err.message;
+    } finally {
+      isLinkingFolder = false;
+    }
+  }
 
   async function loadAttachments(currentGrant) {
     const folderId = getFolderIdFromUrl(currentGrant.Folder_URL);
@@ -535,30 +608,59 @@
           </div>
         {:else}
           <div class="text-center">
-            <p class="text-sm text-gray-500 mb-3">No Drive folder set up yet.</p>
-            {#if folderStore.hasGrantsFolder}
-              <button
-                onclick={handleCreateFolder}
-                disabled={isCreatingFolder}
-                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-wait"
-              >
-                {#if isCreatingFolder}
-                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                  </svg>
-                  Creating...
-                {:else}
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Create Folder
-                {/if}
-              </button>
+            {#if isSearchingFolder}
+              <div class="flex items-center justify-center gap-2 text-gray-500">
+                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <span class="text-sm">Searching for existing folder...</span>
+              </div>
+            {:else if folderStore.hasGrantsFolder}
+              <p class="text-sm text-gray-500 mb-3">No Drive folder linked.</p>
+              <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
+                <button
+                  onclick={handleLinkFolder}
+                  disabled={isLinkingFolder}
+                  class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-wait"
+                >
+                  {#if isLinkingFolder}
+                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Linking...
+                  {:else}
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    Link Existing
+                  {/if}
+                </button>
+                <button
+                  onclick={handleCreateFolder}
+                  disabled={isCreatingFolder}
+                  class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-wait"
+                >
+                  {#if isCreatingFolder}
+                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                    </svg>
+                    Creating...
+                  {:else}
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create New
+                  {/if}
+                </button>
+              </div>
               {#if folderError}
                 <p class="text-xs text-red-600 mt-2">{folderError}</p>
               {/if}
             {:else}
+              <p class="text-sm text-gray-500 mb-1">No Drive folder linked.</p>
               <p class="text-xs text-gray-400">Set up a root folder first from the menu.</p>
             {/if}
           </div>
