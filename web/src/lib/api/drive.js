@@ -277,21 +277,17 @@ export async function createGrantFolderStructure(accessToken, grantsFolderId, gr
 }
 
 /**
- * Add a file to a folder (move it from its current location).
+ * Add a file to a folder (keeps file in original location too).
+ * The file will appear in both its original folder and the target folder.
  * @param {string} accessToken - OAuth access token
- * @param {string} fileId - File ID to move
+ * @param {string} fileId - File ID to add
  * @param {string} targetFolderId - Target folder ID
  * @returns {Promise<{id: string, name: string}>}
  */
 export async function addFileToFolder(accessToken, fileId, targetFolderId) {
-  // First get the file's current parents
-  const file = await getFile(accessToken, fileId);
-  const currentParents = file.parents?.join(',') || '';
-
-  // Update the file's parents
+  // Add target folder as a parent (don't remove existing parents)
   const params = new URLSearchParams({
     addParents: targetFolderId,
-    removeParents: currentParents,
     fields: 'id, name, webViewLink',
   });
 
@@ -306,7 +302,7 @@ export async function addFileToFolder(accessToken, fileId, targetFolderId) {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `Failed to move file (${response.status})`);
+    throw new Error(error.error?.message || `Failed to add file to folder (${response.status})`);
   }
 
   return response.json();
