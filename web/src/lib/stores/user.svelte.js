@@ -2,7 +2,7 @@
  * User authentication state store using Svelte 5 runes.
  * Manages user session, tokens, and team member validation.
  *
- * Credentials are cached in sessionStorage for persistence across page refreshes.
+ * Credentials are cached in localStorage for persistence across browser sessions.
  * On page load, attempts silent token refresh to restore session.
  */
 
@@ -19,8 +19,8 @@ import {
 // Storage key for cached session
 const SESSION_CACHE_KEY = 'grant_tracker_session';
 
-// Max age for cached session before we skip silent refresh (1 hour)
-const SESSION_MAX_AGE_MS = 60 * 60 * 1000;
+// Max age for cached session before we skip silent refresh (7 days)
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 // Reactive state
 let user = $state(null);
@@ -35,26 +35,26 @@ const isAuthenticated = $derived(user !== null && accessToken !== null);
 const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 /**
- * Save session to sessionStorage.
+ * Save session to localStorage.
  */
 function cacheSession(userInfo, token) {
   try {
-    sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+    localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
       user: userInfo,
       timestamp: Date.now(),
     }));
   } catch (e) {
-    // sessionStorage might be unavailable (private browsing, etc.)
+    // localStorage might be unavailable (private browsing, etc.)
     console.warn('Could not cache session:', e);
   }
 }
 
 /**
- * Load cached session from sessionStorage.
+ * Load cached session from localStorage.
  */
 function loadCachedSession() {
   try {
-    const cached = sessionStorage.getItem(SESSION_CACHE_KEY);
+    const cached = localStorage.getItem(SESSION_CACHE_KEY);
     if (cached) {
       return JSON.parse(cached);
     }
@@ -65,11 +65,11 @@ function loadCachedSession() {
 }
 
 /**
- * Clear cached session from sessionStorage.
+ * Clear cached session from localStorage.
  */
 function clearCachedSession() {
   try {
-    sessionStorage.removeItem(SESSION_CACHE_KEY);
+    localStorage.removeItem(SESSION_CACHE_KEY);
   } catch (e) {
     // Ignore errors
   }
