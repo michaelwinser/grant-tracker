@@ -13,10 +13,18 @@ import {
   generateId,
   ActionItemStatus,
 } from '../models.js';
+import {
+  extractFileIdFromUrl,
+  fetchAssignedComments,
+  generateSyncId,
+  parseSyncId,
+} from '../api/comments.js';
+import { initializeMissingSheets, SCHEMA } from '../api/sheets.js';
 
 // Reactive state
 let actionItems = $state([]);
 let isLoading = $state(false);
+let isSyncing = $state(false);
 let error = $state(null);
 let lastLoaded = $state(null);
 
@@ -66,6 +74,36 @@ function getClient() {
     throw new Error('Not authenticated or no spreadsheet selected');
   }
   return createSheetsClient(userStore.accessToken, spreadsheetStore.spreadsheetId);
+}
+
+/**
+ * Ensure the ActionItems sheet exists, creating it if necessary.
+ * @returns {Promise<void>}
+ */
+async function ensureActionItemsSheetExists() {
+  if (!userStore.accessToken || !spreadsheetStore.spreadsheetId) {
+    throw new Error('Not authenticated or no spreadsheet selected');
+  }
+
+  // Try to read the ActionItems sheet to check if it exists
+  const client = getClient();
+  try {
+    await client.readSheet('ActionItems');
+    // Sheet exists, we're good
+  } catch (err) {
+    // If sheet doesn't exist, create it
+    if (err.message?.includes('Unable to parse range') || err.isNotFound) {
+      console.log('ActionItems sheet not found, creating it...');
+      await initializeMissingSheets(
+        userStore.accessToken,
+        spreadsheetStore.spreadsheetId,
+        ['ActionItems']
+      );
+    } else {
+      // Some other error, re-throw
+      throw err;
+    }
+  }
 }
 
 /**
@@ -241,6 +279,156 @@ function getByGrantId(grantId) {
 }
 
 /**
+ * Check if an action item was synced from a comment.
+ * @param {Object} item - Action item
+ * @returns {boolean}
+ */
+function isSyncedItem(item) {
+  return Boolean(item?.synced_comment_id);
+}
+
+/**
+ * Get the source document URL for a synced item.
+ * @param {Object} item - Action item
+ * @param {Object} grant - Grant object with Tracker_URL and Proposal_URL
+ * @returns {string|null} - Document URL or null if not synced
+ */
+function getSyncedDocUrl(item, grant) {
+  if (!item?.synced_comment_id || !grant) return null;
+
+  const parsed = parseSyncId(item.synced_comment_id);
+  if (!parsed) return null;
+
+  // Check which doc the comment came from
+  const trackerFileId = extractFileIdFromUrl(grant.Tracker_URL);
+  const proposalFileId = extractFileIdFromUrl(grant.Proposal_URL);
+
+  if (parsed.fileId === trackerFileId) {
+    return grant.Tracker_URL;
+  } else if (parsed.fileId === proposalFileId) {
+    return grant.Proposal_URL;
+  }
+
+  return null;
+}
+
+/**
+ * Sync action items from comments in Tracker and Proposal docs.
+ * Creates new action items for assigned comments that haven't been synced yet.
+ * @param {string} grantId - Grant ID to sync for
+ * @param {Object} grant - Grant object with Tracker_URL and Proposal_URL
+ * @returns {Promise<{created: number, skipped: number, errors: string[]}>}
+ */
+async function syncFromComments(grantId, grant) {
+  if (!userStore.accessToken) {
+    throw new Error('Not authenticated');
+  }
+
+  isSyncing = true;
+  error = null;
+
+  const result = { created: 0, skipped: 0, errors: [] };
+
+  try {
+    // Ensure ActionItems sheet exists before syncing
+    try {
+      await ensureActionItemsSheetExists();
+    } catch (sheetErr) {
+      throw new Error(`Could not create ActionItems sheet: ${sheetErr.message}`);
+    }
+
+    // Get existing synced comment IDs for this grant
+    const existingItems = getByGrantId(grantId);
+    const existingSyncIds = new Set(
+      existingItems
+        .filter((item) => item.synced_comment_id)
+        .map((item) => item.synced_comment_id)
+    );
+
+    // Collect docs to sync from
+    const docsToSync = [];
+    if (grant.Tracker_URL) {
+      const fileId = extractFileIdFromUrl(grant.Tracker_URL);
+      if (fileId) {
+        docsToSync.push({ fileId, name: 'Tracker' });
+      }
+    }
+    if (grant.Proposal_URL) {
+      const fileId = extractFileIdFromUrl(grant.Proposal_URL);
+      if (fileId) {
+        docsToSync.push({ fileId, name: 'Proposal' });
+      }
+    }
+
+    if (docsToSync.length === 0) {
+      throw new Error('No Tracker or Proposal documents to sync from');
+    }
+
+    // Fetch comments from each doc (include resolved to update status)
+    for (const doc of docsToSync) {
+      try {
+        const comments = await fetchAssignedComments(
+          userStore.accessToken,
+          doc.fileId,
+          { includeResolved: true }
+        );
+
+        for (const comment of comments) {
+          const syncId = generateSyncId(doc.fileId, comment.id);
+
+          // Check if already synced
+          if (existingSyncIds.has(syncId)) {
+            // Find the existing item and check if we need to update its status
+            const existingItem = existingItems.find(
+              (item) => item.synced_comment_id === syncId
+            );
+
+            // If comment is now resolved but item is still open, mark it done
+            if (comment.resolved && existingItem?.status === ActionItemStatus.OPEN) {
+              try {
+                await markDone(existingItem.item_id);
+                result.updated = (result.updated || 0) + 1;
+              } catch (updateErr) {
+                result.errors.push(`Failed to mark resolved: ${updateErr.message}`);
+              }
+            } else {
+              result.skipped++;
+            }
+            continue;
+          }
+
+          // Skip creating new items for already-resolved comments
+          if (comment.resolved) {
+            continue;
+          }
+
+          // Create new action item
+          try {
+            await create({
+              grant_id: grantId,
+              description: comment.content,
+              assignee: comment.assignee,
+              source: `${doc.name} doc comment`,
+              synced_comment_id: syncId,
+              comment_link: comment.htmlLink,
+            });
+            result.created++;
+          } catch (createErr) {
+            result.errors.push(`Failed to create item: ${createErr.message}`);
+          }
+        }
+      } catch (fetchErr) {
+        result.errors.push(`Error fetching ${doc.name} comments: ${fetchErr.message}`);
+      }
+    }
+
+    return result;
+  } finally {
+    isSyncing = false;
+  }
+}
+
+/**
  * Clear all data (on logout or spreadsheet switch).
  */
 function clear() {
@@ -264,6 +452,9 @@ export const actionItemsStore = {
   },
   get isLoading() {
     return isLoading;
+  },
+  get isSyncing() {
+    return isSyncing;
   },
   get error() {
     return error;
@@ -296,4 +487,9 @@ export const actionItemsStore = {
   getByGrantId,
   clear,
   clearError,
+
+  // Sync functions
+  syncFromComments,
+  isSyncedItem,
+  getSyncedDocUrl,
 };

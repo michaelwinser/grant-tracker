@@ -94,8 +94,22 @@ export const SCHEMA = {
     'Proposal_URL',
     'Tracker_URL',
   ],
+  ActionItems: [
+    'item_id',
+    'grant_id',
+    'description',
+    'assignee',
+    'due_date',
+    'status',
+    'source',
+    'created_at',
+    'completed_at',
+    'synced_comment_id',
+    'comment_link',
+  ],
   Status: ['Status'],
   Tags: ['Name'],
+  Approvers: ['Name'],
 };
 
 /**
@@ -124,6 +138,15 @@ export const DEFAULT_TAG_VALUES = [
   'Rust',
   'Security',
   'Infrastructure',
+];
+
+/**
+ * Default approver values for new spreadsheets.
+ */
+export const DEFAULT_APPROVER_VALUES = [
+  'Approver 1',
+  'Approver 2',
+  'Approver 3',
 ];
 
 /**
@@ -180,6 +203,7 @@ export async function validateSchema(accessToken, spreadsheetId) {
   // If valid, ensure all columns exist
   if (missingSheets.length === 0) {
     await ensureGrantsColumns(accessToken, spreadsheetId);
+    await ensureActionItemsColumns(accessToken, spreadsheetId);
   }
 
   return {
@@ -253,6 +277,74 @@ async function ensureGrantsColumns(accessToken, spreadsheetId) {
 
   if (!updateResponse.ok) {
     console.warn('Failed to add missing columns:', await updateResponse.text());
+  }
+}
+
+/**
+ * Ensure the ActionItems sheet has all required columns.
+ * Adds any missing columns to the header row.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ */
+async function ensureActionItemsColumns(accessToken, spreadsheetId) {
+  // First check if ActionItems sheet exists
+  try {
+    const response = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/ActionItems!1:1`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // ActionItems sheet may not exist, skip column check
+      console.warn('ActionItems sheet not found, skipping column check');
+      return;
+    }
+
+    const data = await response.json();
+    const currentHeaders = data.values?.[0] || [];
+    const requiredHeaders = SCHEMA.ActionItems;
+
+    // Find missing columns
+    const missingHeaders = requiredHeaders.filter(
+      (h) => !currentHeaders.includes(h)
+    );
+
+    if (missingHeaders.length === 0) {
+      return; // All columns exist
+    }
+
+    console.log('Adding missing columns to ActionItems sheet:', missingHeaders);
+
+    // Calculate the starting column for new headers
+    const startColumn = currentHeaders.length;
+    const endColumn = startColumn + missingHeaders.length;
+    const startColLetter = columnIndexToLetter(startColumn);
+    const endColLetter = columnIndexToLetter(endColumn - 1);
+
+    // Add the missing headers
+    const updateResponse = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/ActionItems!${startColLetter}1:${endColLetter}1?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: [missingHeaders],
+        }),
+      }
+    );
+
+    if (!updateResponse.ok) {
+      console.warn('Failed to add missing ActionItems columns:', await updateResponse.text());
+    }
+  } catch (err) {
+    console.warn('Error ensuring ActionItems columns:', err);
   }
 }
 
@@ -369,7 +461,7 @@ async function applyBasicFormatting(accessToken, spreadsheetId, sheets) {
 }
 
 /**
- * Add default values to Status and Tags sheets.
+ * Add default values to Status, Tags, and Approvers sheets.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  */
@@ -382,6 +474,10 @@ async function addDefaultDropdownValues(accessToken, spreadsheetId) {
     {
       range: 'Tags!A2:A',
       values: DEFAULT_TAG_VALUES.map((t) => [t]),
+    },
+    {
+      range: 'Approvers!A2:A',
+      values: DEFAULT_APPROVER_VALUES.map((a) => [a]),
     },
   ];
 
@@ -449,8 +545,8 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
     );
   }
 
-  // Add default values for Status and Tags sheets if created
-  if (missingSheets.includes('Status') || missingSheets.includes('Tags')) {
+  // Add default values for Status, Tags, and Approvers sheets if created
+  if (missingSheets.includes('Status') || missingSheets.includes('Tags') || missingSheets.includes('Approvers')) {
     await addDefaultDropdownValues(accessToken, spreadsheetId);
   }
 }
@@ -508,6 +604,34 @@ export async function readTagValues(accessToken, spreadsheetId) {
     return values.length > 0 ? values : DEFAULT_TAG_VALUES;
   } catch {
     return DEFAULT_TAG_VALUES;
+  }
+}
+
+/**
+ * Read approver names from the Approvers sheet.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ * @returns {Promise<string[]>} - List of approver names
+ */
+export async function readApprovers(accessToken, spreadsheetId) {
+  try {
+    const response = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Approvers!A2:A?majorDimension=COLUMNS`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      // Approvers sheet may not exist, return defaults
+      return DEFAULT_APPROVER_VALUES;
+    }
+
+    const data = await response.json();
+    const values = data.values?.[0] || [];
+    return values.length > 0 ? values : DEFAULT_APPROVER_VALUES;
+  } catch {
+    return DEFAULT_APPROVER_VALUES;
   }
 }
 

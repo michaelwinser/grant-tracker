@@ -1,7 +1,6 @@
 <script>
   import { actionItemsStore } from '../stores/actionItems.svelte.js';
   import { grantsStore } from '../stores/grants.svelte.js';
-  import { configStore } from '../stores/config.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
   import { navigate } from '../router.svelte.js';
   import { ActionItemStatus, todayDate } from '../models.js';
@@ -396,21 +395,50 @@
                 </td>
               {/if}
               <td class="px-4 py-4">
-                <input
-                  type="checkbox"
-                  checked={item.status === ActionItemStatus.DONE}
-                  disabled={item.status === ActionItemStatus.CANCELLED}
-                  onchange={() => handleToggleItem(item)}
-                  class="h-5 w-5 text-green-600 rounded border-gray-300 focus:ring-green-500 {item.status === ActionItemStatus.CANCELLED ? 'opacity-50' : ''}"
-                />
+                {#if actionItemsStore.isSyncedItem(item)}
+                  <!-- Synced items show status indicator instead of checkbox -->
+                  <div class="h-5 w-5 flex items-center justify-center" title="Resolve in Google Docs to mark done">
+                    {#if item.status === ActionItemStatus.DONE}
+                      <svg class="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                      </svg>
+                    {:else}
+                      <div class="w-4 h-4 rounded-full border-2 border-blue-400"></div>
+                    {/if}
+                  </div>
+                {:else}
+                  <input
+                    type="checkbox"
+                    checked={item.status === ActionItemStatus.DONE}
+                    disabled={item.status === ActionItemStatus.CANCELLED}
+                    onchange={() => handleToggleItem(item)}
+                    class="h-5 w-5 text-green-600 rounded border-gray-300 focus:ring-green-500 {item.status === ActionItemStatus.CANCELLED ? 'opacity-50' : ''}"
+                  />
+                {/if}
               </td>
               <td class="px-6 py-4">
                 <div class="text-sm {item.status === ActionItemStatus.DONE ? 'text-gray-500 line-through' : 'text-gray-900'}">
                   {item.description}
                 </div>
-                {#if item.status === ActionItemStatus.CANCELLED}
-                  <span class="text-xs text-gray-400">Cancelled</span>
-                {/if}
+                <div class="flex items-center gap-2 mt-1">
+                  {#if item.status === ActionItemStatus.CANCELLED}
+                    <span class="text-xs text-gray-400">Cancelled</span>
+                  {/if}
+                  {#if actionItemsStore.isSyncedItem(item)}
+                    <a
+                      href={item.comment_link || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100"
+                      title={item.status === ActionItemStatus.DONE ? 'Comment resolved' : 'Open comment in docs'}
+                    >
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                      </svg>
+                      {item.status === ActionItemStatus.DONE ? 'resolved' : 'open in docs'}
+                    </a>
+                  {/if}
+                </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if item.grant_id}

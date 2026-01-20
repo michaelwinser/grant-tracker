@@ -2,12 +2,16 @@
   import { grantsStore } from '../stores/grants.svelte.js';
   import { folderStore } from '../stores/folder.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
+  import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
+  import { actionItemsStore } from '../stores/actionItems.svelte.js';
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
   import GrantFormModal from './GrantFormModal.svelte';
   import { createGrantFolderStructure, listFiles, addFileToFolder } from '../api/drive.js';
   import { openFilePicker } from '../api/picker.js';
   import { syncGrantToTrackerDoc } from '../api/docs.js';
+  import { readApprovers } from '../api/sheets.js';
+  import { ActionItemStatus } from '../models.js';
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -36,6 +40,10 @@
   let isAddingAttachment = $state(false);
   let isAddingReport = $state(false);
   let addFileError = $state(null);
+
+  // Action items state
+  let syncMessage = $state(null);
+  let syncSuccess = $state(false);
 
   let grant = $derived(() => {
     const grantId = router.params.id;
@@ -188,7 +196,8 @@
         userStore.accessToken,
         folderStore.grantsFolderId,
         currentGrant.ID,
-        currentGrant
+        currentGrant,
+        spreadsheetStore.spreadsheetId
       );
 
       // Update the grant with folder/doc URLs
@@ -212,7 +221,17 @@
     syncError = null;
 
     try {
-      await syncGrantToTrackerDoc(userStore.accessToken, currentGrant.Tracker_URL, currentGrant);
+      // Read approvers to pass to sync (for recreating deleted Approvals section)
+      let approvers = [];
+      if (spreadsheetStore.spreadsheetId) {
+        try {
+          approvers = await readApprovers(userStore.accessToken, spreadsheetStore.spreadsheetId);
+        } catch (err) {
+          console.warn('Failed to read approvers for sync:', err);
+        }
+      }
+
+      await syncGrantToTrackerDoc(userStore.accessToken, currentGrant.Tracker_URL, currentGrant, approvers);
     } catch (err) {
       syncError = err.message;
     } finally {
@@ -292,6 +311,61 @@
       addFileError = err.message;
     } finally {
       isAddingReport = false;
+    }
+  }
+
+  // Get action items for this grant
+  let grantActionItems = $derived(() => {
+    const currentGrant = grant();
+    if (!currentGrant) return [];
+    return actionItemsStore.getByGrantId(currentGrant.ID);
+  });
+
+  // Check if grant has docs to sync from
+  let hasDocsToSync = $derived(() => {
+    const g = grant();
+    return g && (g.Tracker_URL || g.Proposal_URL);
+  });
+
+  async function handleSyncActionItems() {
+    const currentGrant = grant();
+    if (!currentGrant) return;
+
+    syncMessage = null;
+    syncSuccess = false;
+
+    try {
+      const result = await actionItemsStore.syncFromComments(currentGrant.ID, currentGrant);
+
+      if (result.errors.length > 0) {
+        syncMessage = `Synced with errors: ${result.created} created, ${result.updated || 0} updated, ${result.skipped} unchanged. Errors: ${result.errors.join(', ')}`;
+        syncSuccess = false;
+      } else if (result.created === 0 && result.skipped === 0 && !result.updated) {
+        syncMessage = 'No assigned comments found in documents';
+        syncSuccess = true;
+      } else {
+        const parts = [];
+        if (result.created > 0) parts.push(`${result.created} new`);
+        if (result.updated > 0) parts.push(`${result.updated} marked done`);
+        if (result.skipped > 0) parts.push(`${result.skipped} unchanged`);
+        syncMessage = `Synced: ${parts.join(', ')}`;
+        syncSuccess = true;
+      }
+    } catch (err) {
+      syncMessage = err.message;
+      syncSuccess = false;
+    }
+  }
+
+  async function handleToggleActionItem(item) {
+    try {
+      if (item.status === ActionItemStatus.DONE) {
+        await actionItemsStore.reopen(item.item_id);
+      } else {
+        await actionItemsStore.markDone(item.item_id);
+      }
+    } catch (err) {
+      console.error('Failed to toggle action item:', err);
     }
   }
 </script>
@@ -616,6 +690,117 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Action Items -->
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900">Action Items</h2>
+          {#if hasDocsToSync()}
+            <button
+              onclick={handleSyncActionItems}
+              disabled={actionItemsStore.isSyncing}
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md disabled:opacity-50"
+            >
+              {#if actionItemsStore.isSyncing}
+                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Syncing...
+              {:else}
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sync from Docs
+              {/if}
+            </button>
+          {/if}
+        </div>
+
+        {#if syncMessage}
+          <div class="mb-4 p-3 rounded-lg text-sm {syncSuccess ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}">
+            {syncMessage}
+            <button onclick={() => syncMessage = null} class="ml-2 {syncSuccess ? 'text-green-500 hover:text-green-700' : 'text-red-500 hover:text-red-700'}">Dismiss</button>
+          </div>
+        {/if}
+
+        {#if grantActionItems().length === 0}
+          <p class="text-sm text-gray-500">No action items for this grant.</p>
+          {#if hasDocsToSync()}
+            <p class="text-xs text-gray-400 mt-2">
+              Use "Sync from Docs" to import assigned comments from Tracker or Proposal documents.
+            </p>
+          {/if}
+        {:else}
+          <ul class="divide-y divide-gray-100">
+            {#each grantActionItems() as item (item.item_id)}
+              <li class="py-3 first:pt-0 last:pb-0">
+                <div class="flex items-start gap-3">
+                  {#if actionItemsStore.isSyncedItem(item)}
+                    <!-- Synced items show status indicator instead of checkbox -->
+                    <div class="mt-1 h-4 w-4 flex items-center justify-center" title="Resolve in Google Docs to mark done">
+                      {#if item.status === ActionItemStatus.DONE}
+                        <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                      {:else}
+                        <div class="w-3 h-3 rounded-full border-2 border-blue-400"></div>
+                      {/if}
+                    </div>
+                  {:else}
+                    <!-- Manual items have checkbox -->
+                    <input
+                      type="checkbox"
+                      checked={item.status === ActionItemStatus.DONE}
+                      onchange={() => handleToggleActionItem(item)}
+                      class="mt-1 h-4 w-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                    />
+                  {/if}
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm {item.status === ActionItemStatus.DONE ? 'text-gray-500 line-through' : 'text-gray-900'}">
+                      {item.description}
+                    </p>
+                    <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
+                      {#if item.assignee}
+                        <span class="inline-flex items-center gap-1">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          {item.assignee}
+                        </span>
+                      {/if}
+                      {#if item.due_date}
+                        <span class="inline-flex items-center gap-1">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {new Date(item.due_date).toLocaleDateString()}
+                        </span>
+                      {/if}
+                      {#if actionItemsStore.isSyncedItem(item)}
+                        <!-- Link directly to comment if available, otherwise to doc -->
+                        {@const commentLink = item.comment_link || actionItemsStore.getSyncedDocUrl(item, grant())}
+                        <a
+                          href={commentLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                          title={item.status === ActionItemStatus.DONE ? 'Comment resolved' : 'Resolve comment to mark done'}
+                        >
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                          </svg>
+                          {item.status === ActionItemStatus.DONE ? 'resolved' : 'open in docs'}
+                        </a>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
     </div>
 
     <!-- Sidebar -->

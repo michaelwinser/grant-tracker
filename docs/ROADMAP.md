@@ -2,7 +2,7 @@
 
 This document tracks implementation progress and planned work for Grant Tracker.
 
-**Last updated:** 2026-01-19 (Phase 16 complete)
+**Last updated:** 2026-01-19 (Phase 17.4 action items from comments complete)
 
 ## Status Legend
 
@@ -326,6 +326,10 @@ Production readiness improvements.
   - [ ] Lazy loading for large lists (deferred - not needed yet)
   - [ ] Debounced search/filter (deferred)
   - [x] Memoization (via Svelte $derived)
+- [ ] Two-way comment sync
+  - [ ] Resolve comment in Docs when marking synced action item done
+  - [ ] Add reply with "Marked complete in Grant Tracker" message
+  - [ ] Use Drive API replies.create with `action: "resolve"`
 
 **Blocked by:** Phases 4-11 (need features to polish)
 **Blocks:** Nothing
@@ -438,15 +442,17 @@ New folder-first architecture with Drive as source of truth for files.
 
 ## Phase 17: Google Docs Integration
 
-**Status: Not Started**
+**Status: In Progress**
 
 Sync data between app and Google Docs for distributed source of truth.
 
-- [ ] Tracker doc structure
-  - [ ] Define metadata table format (key-value pairs)
+- [x] Tracker doc structure
+  - [x] Define metadata table format (key-value pairs)
   - [ ] Define approvals table format (date, type, approver, notes)
-  - [ ] Create doc with proper headings and tables on grant creation
-- [ ] Metadata sync
+  - [x] Create doc with proper headings and tables on grant creation
+  - [x] Named range (GRANT_TRACKER_METADATA) for reliable table location
+- [~] Metadata sync
+  - [x] Push metadata from sheet to Tracker doc
   - [ ] Read metadata table from Tracker doc
   - [ ] Display in grant detail (read-only initially)
   - [ ] Future: two-way sync
@@ -454,14 +460,14 @@ Sync data between app and Google Docs for distributed source of truth.
   - [ ] Read approvals table from Tracker doc
   - [ ] Display approval history in grant detail
   - [ ] Future: add approval from app
-- [ ] Action items from comments
-  - [ ] Use Drive API to fetch comments on Tracker/Proposal docs
-  - [ ] Parse comments for action item patterns (e.g., "TODO:", "@assignee")
-  - [ ] Show in action items list with source link
-  - [ ] Mark as synced vs. manual
-- [ ] Periodic sync
+- [x] Action items from comments
+  - [x] Use Drive API to fetch assigned comments on Tracker/Proposal docs
+  - [x] Parse Google Docs native assignment format
+  - [x] Show in action items list with "from docs" source link
+  - [x] Track synced_comment_id for deduplication
+- [x] Periodic sync
   - [ ] Refresh on grant detail load
-  - [ ] Manual "Sync" button
+  - [x] Manual "Sync" button
   - [ ] Future: background polling
 
 **Blocked by:** Phase 16 (Tracker doc creation)
@@ -497,6 +503,75 @@ Polish and advanced workflows.
   - [ ] Group by grant or by assignee
 
 **Blocked by:** Phase 17
+**Blocks:** Nothing
+
+---
+
+## Phase 19: Spreadsheet-Optional Mode (Distributed Source of Truth)
+
+**Status: Not Started**
+
+Make the spreadsheet optional by treating Google Docs as the authoritative source. The spreadsheet becomes a "materialized view" for convenience, with optional two-way sync.
+
+**Architecture:**
+```
+Grants/
+└── {GRANT-ID}/
+    ├── {GRANT-ID}-Tracker      ← Source of truth (metadata table, approvals, comments)
+    ├── {GRANT-ID}-Proposal     ← Shared with grantee
+    └── Reports/                ← Grantee uploads
+```
+
+The app aggregates data from all Tracker docs rather than reading from a central spreadsheet.
+
+**Discovery & Caching:**
+- [ ] List all folders in Grants/ directory via Drive API
+- [ ] Store grant data in IndexedDB with folder modifiedTime
+- [ ] On load, compare modifiedTime to cache - only fetch changed docs
+- [ ] Background refresh for stale data
+
+**Reading from Tracker Docs:**
+- [ ] Parse metadata table from Tracker doc (Docs API table reading)
+- [ ] Extract all grant fields from key-value table
+- [ ] Handle missing/malformed tables gracefully
+- [ ] Cache parsed data with doc revisionId
+
+**Action Items (Comments-Only):**
+- [ ] Remove ActionItems sheet dependency entirely
+- [ ] Query assigned comments across all Tracker/Proposal docs
+- [ ] Filter by resolved status (resolved = done)
+- [ ] Cache comment state, refresh incrementally
+
+**Status History:**
+- [ ] Store status changes as append-only section in Tracker doc
+- [ ] Or: infer from doc revision history (more complex)
+- [ ] Display timeline from doc content
+
+**Materialized View (Optional Spreadsheet):**
+- [ ] "Sync to Spreadsheet" button - writes all grant data to Grants sheet
+- [ ] Two-way sync option:
+  - [ ] Detect spreadsheet edits (compare timestamps)
+  - [ ] Push spreadsheet changes back to Tracker docs
+  - [ ] Conflict resolution: last-write-wins or prompt user
+- [ ] Useful for: bulk filtering, exports, users who prefer Sheets
+
+**Grant Creation Flow:**
+- [ ] Create folder + Tracker doc as primary action
+- [ ] Populate Tracker doc metadata table with initial values
+- [ ] Spreadsheet row created lazily on next sync (if enabled)
+
+**Migration Path:**
+- [ ] "Migrate to Distributed" wizard
+- [ ] For each grant with spreadsheet data but no Tracker doc: create doc, populate metadata
+- [ ] For each grant with both: verify consistency, prefer doc
+- [ ] Keep spreadsheet as fallback during transition
+
+**Performance Targets:**
+- Initial load (cold cache): <5s for 50 grants
+- Incremental load (warm cache, no changes): <500ms
+- Incremental load (warm cache, 1 changed grant): <1s
+
+**Blocked by:** Phase 17 (Tracker doc structure), Phase 18 (permissions)
 **Blocks:** Nothing
 
 ---
@@ -553,6 +628,17 @@ The v2 evolution adds Drive integration for a distributed source of truth:
 - **Distributed source of truth**: Spreadsheet for data, Docs for discussions/approvals, Drive for files
 - **Google-native**: Leverage Sheets Tables, Drive structure, Docs comments
 - **App as aggregator**: The PWA aggregates and displays data from multiple Google sources
+
+### Future Direction: Fully Distributed (Phase 19)
+
+Phase 19 explores making the spreadsheet optional entirely:
+- Each Tracker doc becomes the source of truth for its grant
+- App discovers grants by listing folders, reads metadata from docs
+- Action items are just assigned comments (no ActionItems sheet)
+- Spreadsheet becomes a "materialized view" with optional two-way sync
+- Maximizes walkaway-ability: each grant folder is self-contained
+
+This inverts the current model where the spreadsheet is primary and docs are secondary.
 
 ---
 

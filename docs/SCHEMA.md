@@ -116,6 +116,8 @@ Tasks and to-do items linked to specific grants.
 | G | `source` | Text | | | Origin (e.g., "2025-01-15 meeting") |
 | H | `created_at` | DateTime | | ISO 8601 | When created |
 | I | `completed_at` | DateTime | | ISO 8601 | When marked done |
+| J | `synced_comment_id` | Text | | | Unique ID for items synced from Google Docs comments. Format: `{fileId}:{commentId}`. Used for deduplication across syncs. |
+| K | `comment_link` | URL | | | Direct link to the source comment in Google Docs. Allows jumping directly to the comment thread. |
 
 ### Action Item Status Values (Dropdown)
 
