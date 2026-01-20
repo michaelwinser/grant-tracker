@@ -11,6 +11,11 @@ const DOCS_API_BASE = 'https://docs.googleapis.com/v1/documents';
 export const METADATA_RANGE_NAME = 'GRANT_TRACKER_METADATA';
 
 /**
+ * Named range identifier for the approvals table.
+ */
+export const APPROVALS_RANGE_NAME = 'GRANT_TRACKER_APPROVALS';
+
+/**
  * Get a Google Doc's content.
  * @param {string} accessToken - OAuth access token
  * @param {string} documentId - Document ID
@@ -93,14 +98,55 @@ export function findNamedRange(document, rangeName) {
  * @returns {{startIndex: number, endIndex: number} | null} - Table indices or null if not found
  */
 export function findFirstTable(document) {
+  return findTableByIndex(document, 0);
+}
+
+/**
+ * Find a heading paragraph by its text content.
+ * @param {Object} document - Document data from getDocument
+ * @param {string} headingText - Text to search for (trimmed comparison)
+ * @returns {{startIndex: number, endIndex: number, isHeading: boolean} | null}
+ */
+export function findHeading(document, headingText) {
   const content = document.body?.content || [];
 
   for (const element of content) {
+    if (element.paragraph) {
+      const text = element.paragraph.elements?.[0]?.textRun?.content || '';
+      if (text.trim() === headingText) {
+        const style = element.paragraph.paragraphStyle?.namedStyleType || '';
+        return {
+          startIndex: element.startIndex,
+          endIndex: element.endIndex,
+          isHeading: style.startsWith('HEADING'),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Find a table by its position in the document.
+ * @param {Object} document - Document data from getDocument
+ * @param {number} tableIndex - 0-indexed position of the table
+ * @returns {{startIndex: number, endIndex: number, tableElement: Object} | null}
+ */
+export function findTableByIndex(document, tableIndex) {
+  const content = document.body?.content || [];
+  let tableCount = 0;
+
+  for (const element of content) {
     if (element.table) {
-      return {
-        startIndex: element.startIndex,
-        endIndex: element.endIndex,
-      };
+      if (tableCount === tableIndex) {
+        return {
+          startIndex: element.startIndex,
+          endIndex: element.endIndex,
+          tableElement: element.table,
+        };
+      }
+      tableCount++;
     }
   }
 
@@ -142,6 +188,36 @@ export function buildMetadataTableRequests(grant, insertIndex) {
   });
 
   return { requests, rows, cols, metadataFields };
+}
+
+/**
+ * Build requests to create an approvals table.
+ * @param {string[]} approverNames - List of approver names
+ * @param {number} insertIndex - Index to insert the table at
+ * @returns {{requests: Object[], rows: number, cols: number, approvalFields: Object[]}}
+ */
+export function buildApprovalsTableRequests(approverNames, insertIndex) {
+  // Build approval fields - one row per approver
+  const approvalFields = approverNames.map(name => ({
+    label: name,
+    value: '', // Empty approval status initially
+  }));
+
+  const rows = approvalFields.length;
+  const cols = 2;
+
+  const requests = [];
+
+  // Insert the table
+  requests.push({
+    insertTable: {
+      rows,
+      columns: cols,
+      location: { index: insertIndex },
+    },
+  });
+
+  return { requests, rows, cols, approvalFields };
 }
 
 /**
@@ -226,72 +302,226 @@ export function buildTablePopulationRequests(document, metadataFields) {
 }
 
 /**
- * Initialize a Tracker document with metadata table.
- * Creates the table and named range.
+ * Initialize a Tracker document with metadata and approvals tables.
+ * Creates both tables with named ranges.
  * @param {string} accessToken - OAuth access token
  * @param {string} documentId - Document ID
  * @param {Object} grant - Grant data object
+ * @param {string[]} [approvers] - Optional list of approver names
  * @returns {Promise<void>}
  */
-export async function initializeTrackerDoc(accessToken, documentId, grant) {
-  // First, insert the table structure
-  const { requests: tableRequests, rows, metadataFields } = buildMetadataTableRequests(grant, 1);
+export async function initializeTrackerDoc(accessToken, documentId, grant, approvers = []) {
+  // First, insert "Status" heading
+  await batchUpdate(accessToken, documentId, [
+    { insertText: { location: { index: 1 }, text: 'Status\n' } },
+  ]);
+
+  // Get document and format as H1
+  let doc = await getDocument(accessToken, documentId);
+  await batchUpdate(accessToken, documentId, [{
+    updateParagraphStyle: {
+      range: { startIndex: 1, endIndex: 8 }, // "Status\n"
+      paragraphStyle: { namedStyleType: 'HEADING_1' },
+      fields: 'namedStyleType',
+    },
+  }]);
+
+  // Get document to find insert position after heading
+  doc = await getDocument(accessToken, documentId);
+  const bodyEnd = doc.body?.content?.slice(-1)[0]?.endIndex || 1;
+
+  // Insert the metadata table structure
+  const { requests: tableRequests, metadataFields } = buildMetadataTableRequests(grant, bodyEnd - 1);
 
   await batchUpdate(accessToken, documentId, tableRequests);
 
   // Get the updated document to find table indices
-  const doc = await getDocument(accessToken, documentId);
+  doc = await getDocument(accessToken, documentId);
 
-  // Populate the table cells
+  // Populate the metadata table cells
   const populateRequests = buildTablePopulationRequests(doc, metadataFields);
 
   if (populateRequests.length > 0) {
     await batchUpdate(accessToken, documentId, populateRequests);
   }
 
-  // Get document again to find final table bounds for named range
-  const finalDoc = await getDocument(accessToken, documentId);
-  const tableRange = findFirstTable(finalDoc);
+  // Get document again to find metadata section bounds (heading + table)
+  doc = await getDocument(accessToken, documentId);
+  const statusHeading = findHeading(doc, 'Status');
+  const metadataTable = findFirstTable(doc);
 
-  if (tableRange) {
-    // Create the named range around the table
+  // Create named range for entire Status section (heading + table)
+  if (statusHeading && metadataTable) {
     await batchUpdate(accessToken, documentId, [{
       createNamedRange: {
         name: METADATA_RANGE_NAME,
         range: {
-          startIndex: tableRange.startIndex,
-          endIndex: tableRange.endIndex,
+          startIndex: statusHeading.startIndex,
+          endIndex: metadataTable.endIndex,
         },
       },
     }]);
   }
+
+  // Add approvals section if approvers provided
+  if (approvers && approvers.length > 0) {
+    // Get fresh document state
+    doc = await getDocument(accessToken, documentId);
+
+    // Find insert position (after metadata table + some space)
+    const insertIndex = metadataTable ? metadataTable.endIndex : 1;
+
+    // Insert heading
+    await batchUpdate(accessToken, documentId, [
+      { insertText: { location: { index: insertIndex }, text: '\nApprovals\n' } },
+    ]);
+
+    // Format as H1
+    doc = await getDocument(accessToken, documentId);
+    // Find the "Approvals" paragraph and format it
+    const content = doc.body?.content || [];
+    for (const element of content) {
+      if (element.paragraph) {
+        const text = element.paragraph.elements?.[0]?.textRun?.content || '';
+        if (text.trim() === 'Approvals') {
+          await batchUpdate(accessToken, documentId, [{
+            updateParagraphStyle: {
+              range: { startIndex: element.startIndex, endIndex: element.endIndex },
+              paragraphStyle: { namedStyleType: 'HEADING_1' },
+              fields: 'namedStyleType',
+            },
+          }]);
+          break;
+        }
+      }
+    }
+
+    // Get document to find new insert position
+    doc = await getDocument(accessToken, documentId);
+    const bodyEnd = doc.body?.content?.slice(-1)[0]?.endIndex || 1;
+
+    // Build and insert approvals table
+    const { requests: approvalsRequests, approvalFields } = buildApprovalsTableRequests(approvers, bodyEnd - 1);
+
+    await batchUpdate(accessToken, documentId, approvalsRequests);
+
+    // Get document and populate approvals table
+    doc = await getDocument(accessToken, documentId);
+    const approvalsTable = findTableByIndex(doc, 1); // Second table
+
+    if (approvalsTable && approvalsTable.tableElement) {
+      const approvalsPopulateRequests = buildTablePopulationRequestsForTable(
+        approvalsTable.tableElement,
+        approvalFields
+      );
+
+      if (approvalsPopulateRequests.length > 0) {
+        await batchUpdate(accessToken, documentId, approvalsPopulateRequests);
+      }
+
+      // Get final document state and create named range for entire Approvals section
+      doc = await getDocument(accessToken, documentId);
+      const approvalsHeading = findHeading(doc, 'Approvals');
+      const finalApprovalsTable = findTableByIndex(doc, 1);
+
+      if (approvalsHeading && finalApprovalsTable) {
+        await batchUpdate(accessToken, documentId, [{
+          createNamedRange: {
+            name: APPROVALS_RANGE_NAME,
+            range: {
+              startIndex: approvalsHeading.startIndex,
+              endIndex: finalApprovalsTable.endIndex,
+            },
+          },
+        }]);
+      }
+    }
+  }
 }
 
 /**
- * Update the metadata table in a Tracker document.
- * Finds existing table (via named range or first table), deletes it,
- * and recreates with updated data.
+ * Build requests to populate a specific table's cells.
+ * @param {Object} tableElement - The table element from document structure
+ * @param {Object[]} fields - Array of {label, value} objects
+ * @returns {Object[]} - Requests to populate cells
+ */
+function buildTablePopulationRequestsForTable(tableElement, fields) {
+  const requests = [];
+
+  // Iterate through rows and cells to insert text
+  // We need to go in reverse order because insertions shift indices
+  for (let rowIdx = tableElement.tableRows.length - 1; rowIdx >= 0; rowIdx--) {
+    const row = tableElement.tableRows[rowIdx];
+    const fieldData = fields[rowIdx];
+
+    if (!fieldData) continue;
+
+    // Process cells in reverse order (value first, then label)
+    for (let cellIdx = row.tableCells.length - 1; cellIdx >= 0; cellIdx--) {
+      const cell = row.tableCells[cellIdx];
+      const text = cellIdx === 0 ? fieldData.label : fieldData.value;
+
+      // Find the paragraph inside the cell
+      const cellContent = cell.content || [];
+      for (const para of cellContent) {
+        if (para.paragraph) {
+          const insertIdx = para.startIndex;
+
+          if (text) {
+            requests.push({
+              insertText: {
+                location: { index: insertIdx },
+                text: text,
+              },
+            });
+
+            // Bold the label column
+            if (cellIdx === 0) {
+              requests.push({
+                updateTextStyle: {
+                  range: {
+                    startIndex: insertIdx,
+                    endIndex: insertIdx + text.length,
+                  },
+                  textStyle: { bold: true },
+                  fields: 'bold',
+                },
+              });
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  return requests;
+}
+
+/**
+ * Update the metadata section (Status heading + table) in a Tracker document.
+ * Finds existing section via named range, deletes it, and recreates with updated data.
  * @param {string} accessToken - OAuth access token
  * @param {string} documentId - Document ID
  * @param {Object} grant - Grant data object
  * @returns {Promise<void>}
  */
 export async function updateTrackerDoc(accessToken, documentId, grant) {
-  const doc = await getDocument(accessToken, documentId);
+  let doc = await getDocument(accessToken, documentId);
 
-  // Try to find the named range first
-  let range = findNamedRange(doc, METADATA_RANGE_NAME);
+  // Find the named range (which includes heading + table)
+  const range = findNamedRange(doc, METADATA_RANGE_NAME);
   let insertIndex = 1;
 
   if (range) {
-    // Delete the named range first (it will be recreated)
+    // Delete the named range first
     await batchUpdate(accessToken, documentId, [{
       deleteNamedRange: {
         namedRangeId: range.namedRangeId,
       },
     }]);
 
-    // Delete the content in the range
+    // Delete the content in the range (heading + table)
     await batchUpdate(accessToken, documentId, [{
       deleteContentRange: {
         range: {
@@ -302,48 +532,155 @@ export async function updateTrackerDoc(accessToken, documentId, grant) {
     }]);
 
     insertIndex = range.startIndex;
-  } else {
-    // No named range - check for existing table
-    const existingTable = findFirstTable(doc);
+  }
+  // If no named range, we insert at position 1 (start of document)
 
-    if (existingTable) {
-      // Delete the existing table
-      await batchUpdate(accessToken, documentId, [{
-        deleteContentRange: {
-          range: {
-            startIndex: existingTable.startIndex,
-            endIndex: existingTable.endIndex,
-          },
-        },
-      }]);
-      insertIndex = existingTable.startIndex;
-    }
+  // Insert "Status" heading
+  await batchUpdate(accessToken, documentId, [
+    { insertText: { location: { index: insertIndex }, text: 'Status\n' } },
+  ]);
+
+  // Format as H1
+  doc = await getDocument(accessToken, documentId);
+  const statusHeading = findHeading(doc, 'Status');
+  if (statusHeading) {
+    await batchUpdate(accessToken, documentId, [{
+      updateParagraphStyle: {
+        range: { startIndex: statusHeading.startIndex, endIndex: statusHeading.endIndex },
+        paragraphStyle: { namedStyleType: 'HEADING_1' },
+        fields: 'namedStyleType',
+      },
+    }]);
   }
 
-  // Now create the new table at the determined position
-  const { requests: tableRequests, metadataFields } = buildMetadataTableRequests(grant, insertIndex);
+  // Get fresh document state for table insertion
+  doc = await getDocument(accessToken, documentId);
+  const headingAfterFormat = findHeading(doc, 'Status');
+  const tableInsertIndex = headingAfterFormat?.endIndex || (insertIndex + 7);
 
+  // Create the table
+  const { requests: tableRequests, metadataFields } = buildMetadataTableRequests(grant, tableInsertIndex);
   await batchUpdate(accessToken, documentId, tableRequests);
 
-  // Get updated document and populate cells
-  const updatedDoc = await getDocument(accessToken, documentId);
-  const populateRequests = buildTablePopulationRequests(updatedDoc, metadataFields);
-
+  // Populate the table cells
+  doc = await getDocument(accessToken, documentId);
+  const populateRequests = buildTablePopulationRequests(doc, metadataFields);
   if (populateRequests.length > 0) {
     await batchUpdate(accessToken, documentId, populateRequests);
   }
 
-  // Create the named range
-  const finalDoc = await getDocument(accessToken, documentId);
-  const tableRange = findFirstTable(finalDoc);
+  // Create the named range covering heading + table
+  doc = await getDocument(accessToken, documentId);
+  const finalHeading = findHeading(doc, 'Status');
+  const finalTable = findFirstTable(doc);
 
-  if (tableRange) {
+  if (finalHeading && finalTable) {
     await batchUpdate(accessToken, documentId, [{
       createNamedRange: {
         name: METADATA_RANGE_NAME,
         range: {
-          startIndex: tableRange.startIndex,
-          endIndex: tableRange.endIndex,
+          startIndex: finalHeading.startIndex,
+          endIndex: finalTable.endIndex,
+        },
+      },
+    }]);
+  }
+}
+
+/**
+ * Ensure the metadata section (Status heading + table) exists and is up-to-date.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} documentId - Document ID
+ * @param {Object} grant - Grant data object
+ * @returns {Promise<number>} - End index of the section
+ */
+async function ensureMetadataSection(accessToken, documentId, grant) {
+  let doc = await getDocument(accessToken, documentId);
+  const existingRange = findNamedRange(doc, METADATA_RANGE_NAME);
+
+  if (existingRange) {
+    // Section exists - update it (this recreates heading + table)
+    await updateTrackerDoc(accessToken, documentId, grant);
+    doc = await getDocument(accessToken, documentId);
+    const updatedRange = findNamedRange(doc, METADATA_RANGE_NAME);
+    return updatedRange?.endIndex || 1;
+  }
+
+  // Section doesn't exist - create it from scratch using updateTrackerDoc
+  // (which handles creating heading + table + named range)
+  await updateTrackerDoc(accessToken, documentId, grant);
+  doc = await getDocument(accessToken, documentId);
+  const newRange = findNamedRange(doc, METADATA_RANGE_NAME);
+  return newRange?.endIndex || 1;
+}
+
+/**
+ * Ensure the Approvals section (heading + table) exists.
+ * If it exists, leaves it alone to preserve user edits. If missing, creates it.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} documentId - Document ID
+ * @param {string[]} approvers - List of approver names
+ * @param {number} insertAfterIndex - Index to insert section after (if creating)
+ * @returns {Promise<void>}
+ */
+async function ensureApprovalsSection(accessToken, documentId, approvers, insertAfterIndex) {
+  let doc = await getDocument(accessToken, documentId);
+  const existingRange = findNamedRange(doc, APPROVALS_RANGE_NAME);
+
+  if (existingRange) {
+    // Approvals section exists - leave it alone (don't overwrite user edits)
+    return;
+  }
+
+  // Section doesn't exist - create heading + table
+
+  // Insert heading
+  await batchUpdate(accessToken, documentId, [
+    { insertText: { location: { index: insertAfterIndex }, text: '\nApprovals\n' } },
+  ]);
+
+  // Format as H1
+  doc = await getDocument(accessToken, documentId);
+  const heading = findHeading(doc, 'Approvals');
+  if (heading) {
+    await batchUpdate(accessToken, documentId, [{
+      updateParagraphStyle: {
+        range: { startIndex: heading.startIndex, endIndex: heading.endIndex },
+        paragraphStyle: { namedStyleType: 'HEADING_1' },
+        fields: 'namedStyleType',
+      },
+    }]);
+  }
+
+  // Insert table at end of document
+  doc = await getDocument(accessToken, documentId);
+  const bodyEnd = doc.body?.content?.slice(-1)[0]?.endIndex || 1;
+  const { requests: tableRequests, approvalFields } = buildApprovalsTableRequests(approvers, bodyEnd - 1);
+  await batchUpdate(accessToken, documentId, tableRequests);
+
+  // Populate the table
+  doc = await getDocument(accessToken, documentId);
+  const approvalsTable = findTableByIndex(doc, 1);
+
+  if (approvalsTable && approvalsTable.tableElement) {
+    const populateRequests = buildTablePopulationRequestsForTable(approvalsTable.tableElement, approvalFields);
+    if (populateRequests.length > 0) {
+      await batchUpdate(accessToken, documentId, populateRequests);
+    }
+  }
+
+  // Create named range covering heading + table
+  doc = await getDocument(accessToken, documentId);
+  const finalHeading = findHeading(doc, 'Approvals');
+  const finalTable = findTableByIndex(doc, 1);
+
+  if (finalHeading && finalTable) {
+    await batchUpdate(accessToken, documentId, [{
+      createNamedRange: {
+        name: APPROVALS_RANGE_NAME,
+        range: {
+          startIndex: finalHeading.startIndex,
+          endIndex: finalTable.endIndex,
         },
       },
     }]);
@@ -352,13 +689,14 @@ export async function updateTrackerDoc(accessToken, documentId, grant) {
 
 /**
  * Sync a grant's data to its Tracker document.
- * Initializes or updates the metadata table as needed.
+ * Recreates any missing sections (Status heading + table, Approvals heading + table).
  * @param {string} accessToken - OAuth access token
  * @param {string} trackerUrl - Tracker document URL
  * @param {Object} grant - Grant data object
+ * @param {string[]} [approvers] - Optional list of approver names for recreating Approvals section
  * @returns {Promise<void>}
  */
-export async function syncGrantToTrackerDoc(accessToken, trackerUrl, grant) {
+export async function syncGrantToTrackerDoc(accessToken, trackerUrl, grant, approvers = []) {
   // Extract document ID from URL
   const match = trackerUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) {
@@ -367,16 +705,11 @@ export async function syncGrantToTrackerDoc(accessToken, trackerUrl, grant) {
 
   const documentId = match[1];
 
-  // Check if document has the metadata table
-  const doc = await getDocument(accessToken, documentId);
-  const existingRange = findNamedRange(doc, METADATA_RANGE_NAME);
-  const existingTable = findFirstTable(doc);
+  // Ensure Status section (heading + table) exists and is up-to-date
+  const metadataEndIndex = await ensureMetadataSection(accessToken, documentId, grant);
 
-  if (existingRange || existingTable) {
-    // Update existing table
-    await updateTrackerDoc(accessToken, documentId, grant);
-  } else {
-    // Initialize new table
-    await initializeTrackerDoc(accessToken, documentId, grant);
+  // If approvers provided, ensure Approvals section exists
+  if (approvers && approvers.length > 0) {
+    await ensureApprovalsSection(accessToken, documentId, approvers, metadataEndIndex);
   }
 }

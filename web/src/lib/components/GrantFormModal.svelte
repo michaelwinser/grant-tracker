@@ -2,6 +2,7 @@
   import { grantsStore } from '../stores/grants.svelte.js';
   import { folderStore } from '../stores/folder.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
+  import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
   import { GrantStatus } from '../models.js';
   import { createGrantFolderStructure } from '../api/drive.js';
 
@@ -118,7 +119,8 @@
               userStore.accessToken,
               folderStore.grantsFolderId,
               grantData.ID,
-              grantData
+              grantData,
+              spreadsheetStore.spreadsheetId
             );
 
             // Update the grant with folder/doc URLs

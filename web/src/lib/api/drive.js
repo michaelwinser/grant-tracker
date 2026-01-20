@@ -221,7 +221,7 @@ export async function folderExists(accessToken, folderId) {
  * Create the complete folder structure for a new grant.
  * Creates:
  * - [GRANT-ID]/ folder under the Grants/ folder
- * - [GRANT-ID]-Tracker doc (optionally initialized with grant metadata)
+ * - [GRANT-ID]-Tracker doc (optionally initialized with grant metadata and approvals)
  * - [GRANT-ID]-Proposal doc
  * - Reports/ subfolder
  *
@@ -229,11 +229,13 @@ export async function folderExists(accessToken, folderId) {
  * @param {string} grantsFolderId - ID of the parent Grants/ folder
  * @param {string} grantId - Grant ID (e.g., "PYPI-2026-Packaging")
  * @param {Object} [grant] - Optional grant data to initialize Tracker doc
+ * @param {string} [spreadsheetId] - Optional spreadsheet ID to read approvers from
  * @returns {Promise<{folderId: string, folderUrl: string, trackerUrl: string, proposalUrl: string, reportsFolderId: string}>}
  */
-export async function createGrantFolderStructure(accessToken, grantsFolderId, grantId, grant = null) {
-  // Import docs module dynamically to avoid circular dependencies
+export async function createGrantFolderStructure(accessToken, grantsFolderId, grantId, grant = null, spreadsheetId = null) {
+  // Import modules dynamically to avoid circular dependencies
   const { initializeTrackerDoc } = await import('./docs.js');
+  const { readApprovers } = await import('./sheets.js');
 
   // Create the grant folder
   const grantFolder = await createFolder(accessToken, grantId, grantsFolderId);
@@ -248,7 +250,17 @@ export async function createGrantFolderStructure(accessToken, grantsFolderId, gr
   // Initialize Tracker doc with grant metadata if grant data provided
   if (grant) {
     try {
-      await initializeTrackerDoc(accessToken, trackerDoc.id, grant);
+      // Read approvers from spreadsheet if available
+      let approvers = [];
+      if (spreadsheetId) {
+        try {
+          approvers = await readApprovers(accessToken, spreadsheetId);
+        } catch (err) {
+          console.warn('Failed to read approvers:', err);
+        }
+      }
+
+      await initializeTrackerDoc(accessToken, trackerDoc.id, grant, approvers);
     } catch (err) {
       console.warn('Failed to initialize Tracker doc:', err);
       // Don't fail the whole operation if doc init fails
