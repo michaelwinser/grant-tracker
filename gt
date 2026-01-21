@@ -226,49 +226,35 @@ gcp_run() {
 }
 
 gcp_deploy() {
-    echo "Deploying to Cloud Run..."
-
-    # Check for required environment
-    if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
-        if [ -f .env ]; then
-            source .env
-        fi
-    fi
-
-    if [ -z "$GOOGLE_CLOUD_PROJECT" ]; then
-        echo "Error: GOOGLE_CLOUD_PROJECT not set"
-        echo "Set it in .env or export it: export GOOGLE_CLOUD_PROJECT=your-project-id"
+    # Check for config file
+    if [ ! -f "scripts/gcp-config.env" ]; then
+        echo "Error: scripts/gcp-config.env not found"
+        echo ""
+        echo "To set up deployment:"
+        echo "  1. cp scripts/gcp-config.env.example scripts/gcp-config.env"
+        echo "  2. Edit scripts/gcp-config.env with your GCP project and OAuth credentials"
+        echo "  3. Run: ./gt gcp auth"
+        echo "  4. Run: ./gt gcp deploy"
         exit 1
     fi
 
-    local region="${GOOGLE_CLOUD_REGION:-us-central1}"
-    local service_name="grant-tracker"
-    local image_url="gcr.io/$GOOGLE_CLOUD_PROJECT/$service_name"
+    # Check if dev image exists (needed for gcloud)
+    if ! docker image inspect "$DEV_IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Dev image not found. Building first..."
+        dev_build
+    fi
 
-    echo "Project: $GOOGLE_CLOUD_PROJECT"
-    echo "Region: $region"
-    echo "Image: $image_url"
-    echo ""
+    # Run deploy script in dev container (has gcloud installed)
+    # Mount Docker socket so we can build/push from inside container
+    mkdir -p "$(pwd)/.gcloud"
 
-    # Build and push
-    echo "Building and pushing image..."
-    docker build -t "$image_url" -f Dockerfile .
-    docker push "$image_url"
-
-    # Deploy to Cloud Run
-    echo "Deploying to Cloud Run..."
-    gcloud run deploy "$service_name" \
-        --image "$image_url" \
-        --region "$region" \
-        --platform managed \
-        --allow-unauthenticated \
-        --set-env-vars "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" \
-        --set-secrets "GOOGLE_CLIENT_SECRET=google-client-secret:latest"
-
-    echo ""
-    echo "Deployment complete!"
-    echo "Don't forget to update REDIRECT_URI in Cloud Run environment variables"
-    echo "to match your Cloud Run URL: https://<service-url>/auth/callback"
+    docker run --rm -it \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -w /workspace \
+        "$DEV_IMAGE_NAME" \
+        /workspace/scripts/deploy.sh
 }
 
 case "${1:-}" in
