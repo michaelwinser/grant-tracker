@@ -175,14 +175,19 @@ gcp() {
         deploy)
             gcp_deploy
             ;;
+        domain)
+            shift
+            gcp_domain "$@"
+            ;;
         "")
             echo "Usage: ./gt gcp <subcommand>"
             echo ""
             echo "Subcommands:"
-            echo "  setup   Create GCP project and enable APIs"
-            echo "  oauth   Configure OAuth credentials"
-            echo "  auth    Authenticate with Google Cloud"
-            echo "  deploy  Deploy to Cloud Run"
+            echo "  setup         Create GCP project and enable APIs"
+            echo "  oauth         Configure OAuth credentials"
+            echo "  auth          Authenticate with Google Cloud"
+            echo "  deploy        Deploy to Cloud Run"
+            echo "  domain <name> Map a custom domain to Cloud Run"
             ;;
         *)
             echo "Unknown gcp subcommand: $subcmd"
@@ -223,6 +228,78 @@ gcp_run() {
         -w /workspace \
         "$DEV_IMAGE_NAME" \
         "$@"
+}
+
+gcp_domain() {
+    local domain="${1:-}"
+    if [ -z "$domain" ]; then
+        echo "Usage: ./gt gcp domain <domain-name>"
+        echo ""
+        echo "Example: ./gt gcp domain grants.example.org"
+        exit 1
+    fi
+
+    # Load config
+    if [ ! -f "scripts/gcp-config.env" ]; then
+        echo "Error: scripts/gcp-config.env not found"
+        exit 1
+    fi
+    source scripts/gcp-config.env
+
+    GCP_REGION="${GCP_REGION:-us-central1}"
+    SERVICE_NAME="${SERVICE_NAME:-grant-tracker}"
+
+    echo "=== Custom Domain Mapping ==="
+    echo "Domain:   $domain"
+    echo "Service:  $SERVICE_NAME"
+    echo "Region:   $GCP_REGION"
+    echo ""
+
+    # Check if dev image exists (needed for gcloud)
+    if ! docker image inspect "$DEV_IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Dev image not found. Building first..."
+        dev_build
+    fi
+
+    mkdir -p "$(pwd)/.gcloud"
+
+    # Create domain mapping
+    echo "Creating domain mapping..."
+    docker run --rm -it \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -w /workspace \
+        "$DEV_IMAGE_NAME" \
+        gcloud run domain-mappings create \
+            --service "$SERVICE_NAME" \
+            --domain "$domain" \
+            --region "$GCP_REGION"
+
+    echo ""
+    echo "=== DNS Configuration Required ==="
+    echo ""
+    echo "Add these DNS records at your domain registrar:"
+    echo ""
+
+    # Get DNS records
+    docker run --rm \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -w /workspace \
+        "$DEV_IMAGE_NAME" \
+        gcloud run domain-mappings describe \
+            --domain "$domain" \
+            --region "$GCP_REGION" \
+            --format="table(resourceRecords.type, resourceRecords.rrdata)"
+
+    echo ""
+    echo "=== OAuth Update Required ==="
+    echo ""
+    echo "Add this redirect URI to your OAuth client:"
+    echo "  https://${domain}/auth/callback"
+    echo ""
+    echo "Go to: https://console.cloud.google.com/apis/credentials"
+    echo "Edit your OAuth 2.0 Client ID and add the redirect URI."
 }
 
 gcp_deploy() {

@@ -51,6 +51,7 @@ echo "Enabling required APIs..."
 gcloud services enable \
     run.googleapis.com \
     artifactregistry.googleapis.com \
+    cloudbuild.googleapis.com \
     --quiet
 
 # Create Artifact Registry repository if it doesn't exist
@@ -62,18 +63,12 @@ gcloud artifacts repositories create "$SERVICE_NAME" \
     --location="$GCP_REGION" \
     --description="Grant Tracker container images"
 
-# Configure Docker for Artifact Registry
-echo "Configuring Docker authentication..."
-gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
-
-# Build the image
-echo "Building Docker image..."
+# Build using Cloud Build (no local Docker needed)
+echo "Building image with Cloud Build..."
 cd "$PROJECT_ROOT"
-docker build -t "$IMAGE_NAME" -f Dockerfile .
-
-# Push to Artifact Registry
-echo "Pushing image to Artifact Registry..."
-docker push "$IMAGE_NAME"
+gcloud builds submit \
+    --tag "$IMAGE_NAME" \
+    --quiet
 
 # Deploy to Cloud Run
 echo "Deploying to Cloud Run..."
@@ -106,7 +101,7 @@ echo ""
 echo "Updating service with correct REDIRECT_URI..."
 gcloud run services update "$SERVICE_NAME" \
     --region "$GCP_REGION" \
-    --set-env-vars "REDIRECT_URI=${SERVICE_URL}/auth/callback" \
+    --update-env-vars "REDIRECT_URI=${SERVICE_URL}/auth/callback" \
     --quiet
 
 echo ""
