@@ -4,6 +4,7 @@
   import { folderStore } from './lib/stores/folder.svelte.js';
   import { dataStore } from './lib/stores/data.svelte.js';
   import { router } from './lib/router.svelte.js';
+  import { loadConfig, configStore } from './lib/stores/config.svelte.js';
   import SignInButton from './lib/components/SignInButton.svelte';
   import NavBar from './lib/components/NavBar.svelte';
   import FolderPicker from './lib/components/FolderPicker.svelte';
@@ -24,8 +25,9 @@
   // Track which spreadsheet ID we've loaded data for
   let dataLoadedFor = $state(null);
 
-  // Initialize auth, spreadsheet, and folder stores on mount
+  // Initialize config, auth, spreadsheet, and folder stores on mount
   $effect(() => {
+    loadConfig(); // Load client ID and other runtime config
     userStore.initialize();
     spreadsheetStore.initialize();
     folderStore.initialize();

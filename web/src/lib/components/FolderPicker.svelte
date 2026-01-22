@@ -2,11 +2,10 @@
   import { folderStore } from '../stores/folder.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
+  import { configStore } from '../stores/config.svelte.js';
   import { openFolderPicker } from '../api/picker.js';
   import { createFolder, findOrCreateFolder, listFiles } from '../api/drive.js';
   import { createSpreadsheet, validateSchema } from '../api/sheets.js';
-
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   let mode = $state('select'); // 'select' | 'creating' | 'setting-up' | 'setting-up-spreadsheet'
   let newFolderName = $state('Grant Tracker');
@@ -31,7 +30,7 @@
     folderStore.clearError();
 
     try {
-      const selected = await openFolderPicker(userStore.accessToken, clientId);
+      const selected = await openFolderPicker(userStore.accessToken, configStore.clientId);
       if (!selected) return; // User cancelled
 
       folderStore.setFolder(selected);

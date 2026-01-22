@@ -1,14 +1,13 @@
 <script>
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
+  import { configStore } from '../stores/config.svelte.js';
   import { openSpreadsheetPicker } from '../api/picker.js';
   import {
     createSpreadsheet,
     validateSchema,
     initializeMissingSheets,
   } from '../api/sheets.js';
-
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   let mode = $state('select'); // 'select' | 'creating' | 'validating' | 'initializing'
   let newSheetName = $state('Grant Tracker');
@@ -19,7 +18,7 @@
     spreadsheetStore.clearError();
 
     try {
-      const selected = await openSpreadsheetPicker(userStore.accessToken, clientId);
+      const selected = await openSpreadsheetPicker(userStore.accessToken, configStore.clientId);
       if (!selected) return; // User cancelled
 
       spreadsheetStore.setSpreadsheet(selected);

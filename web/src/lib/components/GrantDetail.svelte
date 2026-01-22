@@ -4,6 +4,7 @@
   import { userStore } from '../stores/user.svelte.js';
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
   import { actionItemsStore } from '../stores/actionItems.svelte.js';
+  import { configStore } from '../stores/config.svelte.js';
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
   import GrantFormModal from './GrantFormModal.svelte';
@@ -12,8 +13,6 @@
   import { syncGrantToTrackerDoc } from '../api/docs.js';
   import { readApprovers } from '../api/sheets.js';
   import { ActionItemStatus } from '../models.js';
-
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   // Edit modal state
   let showEditModal = $state(false);
@@ -187,7 +186,7 @@
     folderError = null;
 
     try {
-      const folder = await openFolderPicker(userStore.accessToken, clientId);
+      const folder = await openFolderPicker(userStore.accessToken, configStore.clientId);
 
       if (folder) {
         // Update the grant with the selected folder URL
@@ -328,7 +327,7 @@
 
     try {
       const folderId = getFolderIdFromUrl(currentGrant.Folder_URL);
-      const files = await openFilePicker(userStore.accessToken, clientId, {
+      const files = await openFilePicker(userStore.accessToken, configStore.clientId, {
         title: 'Add Attachment',
         multiSelect: true,
         uploadParentId: folderId,
@@ -383,7 +382,7 @@
     addFileError = null;
 
     try {
-      const files = await openFilePicker(userStore.accessToken, clientId, {
+      const files = await openFilePicker(userStore.accessToken, configStore.clientId, {
         title: 'Add Report',
         multiSelect: true,
         uploadParentId: reportsFolderId,

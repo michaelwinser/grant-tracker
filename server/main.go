@@ -70,6 +70,9 @@ func main() {
 	mux.HandleFunc("/auth/logout", handleLogout)
 	mux.HandleFunc("/auth/status", handleStatus)
 
+	// Config endpoint (returns client ID for picker)
+	mux.HandleFunc("/api/config", handleConfig)
+
 	// Static files and SPA routing
 	mux.HandleFunc("/", handleStatic)
 
@@ -279,6 +282,14 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	} else {
 		http.Redirect(w, r, "/", http.StatusFound)
 	}
+}
+
+// handleConfig returns client configuration for the frontend
+func handleConfig(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"clientId": clientID,
+	})
 }
 
 // handleStatus returns current auth status
