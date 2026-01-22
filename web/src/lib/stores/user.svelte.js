@@ -118,6 +118,18 @@ function clearError() {
 }
 
 /**
+ * Set user directly (for client-side auth).
+ * @param {Object} userData - User info { email, name, picture }
+ * @param {string} token - Access token
+ */
+function setUser(userData, token) {
+  user = userData;
+  accessToken = token;
+  isLoading = false;
+  error = null;
+}
+
+/**
  * Handle successful token refresh.
  */
 function handleTokenRefresh(tokenData) {
@@ -163,6 +175,7 @@ export const userStore = {
   initialize,
   signIn,
   signOut,
+  setUser,
   validateTeamMember,
   setAccessDenied,
   clearError,

@@ -1,18 +1,22 @@
 /**
  * Application configuration store.
- * Fetches runtime config from the server (client ID, etc).
+ * Fetches runtime config from the server, with fallback for static hosting.
  */
 
 let config = $state({
   clientId: null,
   loaded: false,
   error: null,
+  // True if server-side auth endpoints are available (Cloud Run)
+  // False for static hosting (GitHub Pages)
+  serverAuthAvailable: false,
 });
 
 let loadPromise = null;
 
 /**
  * Load configuration from the server.
+ * Falls back to VITE_GOOGLE_CLIENT_ID for static hosting.
  * Returns cached config if already loaded.
  */
 export async function loadConfig() {
@@ -27,16 +31,31 @@ export async function loadConfig() {
   loadPromise = (async () => {
     try {
       const response = await fetch('/api/config');
-      if (!response.ok) {
-        throw new Error('Failed to load config');
+      if (response.ok) {
+        const data = await response.json();
+        config.clientId = data.clientId;
+        config.serverAuthAvailable = true;
+        config.loaded = true;
+        console.log('Config loaded from server (server-side auth available)');
+        return config;
       }
-      const data = await response.json();
-      config.clientId = data.clientId;
-      config.loaded = true;
     } catch (err) {
-      config.error = err.message;
-      console.error('Failed to load config:', err);
+      // Server not available - this is expected for static hosting
+      console.log('Server config not available, using static hosting mode');
     }
+
+    // Fallback to build-time config for static hosting
+    const buildTimeClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (buildTimeClientId) {
+      config.clientId = buildTimeClientId;
+      config.serverAuthAvailable = false;
+      config.loaded = true;
+      console.log('Config loaded from build-time env (client-side auth only)');
+    } else {
+      config.error = 'No client ID available. Configure VITE_GOOGLE_CLIENT_ID for static hosting.';
+      console.error(config.error);
+    }
+
     return config;
   })();
 
@@ -60,5 +79,8 @@ export const configStore = {
   },
   get error() {
     return config.error;
+  },
+  get serverAuthAvailable() {
+    return config.serverAuthAvailable;
   },
 };

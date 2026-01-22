@@ -2,24 +2,49 @@
 set -e
 
 # Cloud Run deployment script
-# Run from project root: ./scripts/deploy.sh
+# Usage: ./scripts/deploy.sh <environment>
+# Environments: staging, prod
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Load config
-if [ -f "$SCRIPT_DIR/gcp-config.env" ]; then
-    source "$SCRIPT_DIR/gcp-config.env"
+# Check for environment argument
+ENV="${1:-}"
+if [ -z "$ENV" ]; then
+    echo "Usage: ./scripts/deploy.sh <environment>"
+    echo ""
+    echo "Environments:"
+    echo "  staging   Deploy to grants-staging.alpha-omega.fund"
+    echo "  prod      Deploy to grants.alpha-omega.fund"
+    exit 1
+fi
+
+# Validate environment
+if [ "$ENV" != "staging" ] && [ "$ENV" != "prod" ]; then
+    echo "Error: Unknown environment '$ENV'"
+    echo "Valid environments: staging, prod"
+    exit 1
+fi
+
+# Load environment-specific config
+ENV_FILE="$SCRIPT_DIR/envs/${ENV}.env"
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
 else
-    echo "Error: scripts/gcp-config.env not found"
-    echo "Copy scripts/gcp-config.env.example to scripts/gcp-config.env and fill in your values"
+    echo "Error: Environment config not found: $ENV_FILE"
+    echo "Copy scripts/envs/${ENV}.env.example to scripts/envs/${ENV}.env and fill in your values"
     exit 1
 fi
 
 # Validate required vars
 if [ -z "$GCP_PROJECT_ID" ] || [ -z "$GOOGLE_CLIENT_ID" ] || [ -z "$GOOGLE_CLIENT_SECRET" ]; then
     echo "Error: Missing required configuration"
-    echo "Ensure GCP_PROJECT_ID, GOOGLE_CLIENT_ID, and GOOGLE_CLIENT_SECRET are set in gcp-config.env"
+    echo "Ensure GCP_PROJECT_ID, GOOGLE_CLIENT_ID, and GOOGLE_CLIENT_SECRET are set in $ENV_FILE"
+    exit 1
+fi
+
+if [ -z "$REDIRECT_URI" ]; then
+    echo "Error: REDIRECT_URI must be set in $ENV_FILE"
     exit 1
 fi
 
@@ -29,10 +54,12 @@ SERVICE_NAME="${SERVICE_NAME:-grant-tracker}"
 IMAGE_NAME="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${SERVICE_NAME}/${SERVICE_NAME}"
 
 echo "=== Cloud Run Deployment ==="
-echo "Project:  $GCP_PROJECT_ID"
-echo "Region:   $GCP_REGION"
-echo "Service:  $SERVICE_NAME"
-echo "Image:    $IMAGE_NAME"
+echo "Environment: $ENV"
+echo "Project:     $GCP_PROJECT_ID"
+echo "Region:      $GCP_REGION"
+echo "Service:     $SERVICE_NAME"
+echo "Redirect:    $REDIRECT_URI"
+echo "Image:       $IMAGE_NAME"
 echo ""
 
 # Check gcloud auth
@@ -61,7 +88,7 @@ gcloud artifacts repositories describe "$SERVICE_NAME" \
 gcloud artifacts repositories create "$SERVICE_NAME" \
     --repository-format=docker \
     --location="$GCP_REGION" \
-    --description="Grant Tracker container images"
+    --description="Grant Tracker container images ($ENV)"
 
 # Build using Cloud Build (no local Docker needed)
 echo "Building image with Cloud Build..."
@@ -70,39 +97,38 @@ gcloud builds submit \
     --tag "$IMAGE_NAME" \
     --quiet
 
-# Deploy to Cloud Run
+# Deploy to Cloud Run with all environment variables set at once
 echo "Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE_NAME" \
     --image "$IMAGE_NAME" \
     --region "$GCP_REGION" \
     --platform managed \
     --allow-unauthenticated \
-    --set-env-vars "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" \
-    --set-env-vars "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}" \
+    --set-env-vars "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},REDIRECT_URI=${REDIRECT_URI}" \
     --quiet
 
-# Get the service URL
+# Get the service URL (for display only - we use the configured REDIRECT_URI)
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
     --region "$GCP_REGION" \
     --format 'value(status.url)')
 
 echo ""
 echo "=== Deployment Complete ==="
-echo "Service URL: $SERVICE_URL"
+echo "Environment:  $ENV"
+echo "Service URL:  $SERVICE_URL"
+echo "Redirect URI: $REDIRECT_URI"
 echo ""
-echo "IMPORTANT: Add this redirect URI to your OAuth client in GCP Console:"
-echo "  ${SERVICE_URL}/auth/callback"
-echo ""
-echo "Go to: https://console.cloud.google.com/apis/credentials"
-echo "Edit your OAuth 2.0 Client ID and add the redirect URI above."
 
-# Update the service with the correct redirect URI
-echo ""
-echo "Updating service with correct REDIRECT_URI..."
-gcloud run services update "$SERVICE_NAME" \
-    --region "$GCP_REGION" \
-    --update-env-vars "REDIRECT_URI=${SERVICE_URL}/auth/callback" \
-    --quiet
+# Extract domain from redirect URI for reminder
+DOMAIN=$(echo "$REDIRECT_URI" | sed -E 's|https?://([^/]+).*|\1|')
+if [ "$SERVICE_URL" != "https://$DOMAIN" ]; then
+    echo "NOTE: Using custom domain. Ensure DNS is configured for: $DOMAIN"
+    echo ""
+fi
 
+echo "Ensure this redirect URI is registered in your OAuth client:"
+echo "  $REDIRECT_URI"
 echo ""
-echo "Done! Your app is live at: $SERVICE_URL"
+echo "GCP Console: https://console.cloud.google.com/apis/credentials"
+echo ""
+echo "Done! Your app is live at: https://$DOMAIN"

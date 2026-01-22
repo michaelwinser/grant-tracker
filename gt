@@ -10,7 +10,7 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  build       Build the production container"
-    echo "  start       Start the app (port 8080)"
+    echo "  start       Start the app locally (port 8080)"
     echo "  stop        Stop the running container"
     echo "  logs        Show container logs"
     echo "  status      Show container status"
@@ -20,15 +20,15 @@ usage() {
     echo ""
     echo "  commit <msg> [files...]  Git commit with Co-Authored-By trailer"
     echo ""
-    echo "  gcp setup   Create GCP project and enable APIs"
-    echo "  gcp oauth   Configure OAuth credentials"
-    echo "  gcp auth    Authenticate with Google Cloud"
-    echo "  gcp deploy  Deploy to Cloud Run"
+    echo "  gcp auth              Authenticate with Google Cloud"
+    echo "  gcp deploy <env>      Deploy to Cloud Run (staging|prod)"
+    echo "  gcp domain <env> <d>  Map custom domain to environment"
     echo ""
     echo "Examples:"
-    echo "  ./gt build && ./gt start"
-    echo "  ./gt commit \"Add new feature\" src/"
-    echo "  ./gt gcp deploy"
+    echo "  ./gt build && ./gt start           # Local testing"
+    echo "  ./gt gcp deploy staging            # Deploy to staging"
+    echo "  ./gt gcp deploy prod               # Deploy to production"
+    echo "  ./gt gcp domain staging grants-staging.example.com"
 }
 
 # Build production container
@@ -38,7 +38,7 @@ build() {
     echo "Build complete. Run './gt start' to start the app."
 }
 
-# Start production container
+# Start production container locally
 start() {
     if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
         echo "Container already running. Use './gt stop' first or './gt logs' to see output."
@@ -54,12 +54,15 @@ start() {
     # Remove stopped container if exists
     docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
 
-    # Load environment from .env if it exists
+    # Load environment from local.env (preferred) or .env (fallback)
     local env_file=""
-    if [ -f .env ]; then
+    if [ -f scripts/envs/local.env ]; then
+        env_file="--env-file scripts/envs/local.env"
+    elif [ -f .env ]; then
         env_file="--env-file .env"
-    elif [ -f .env.local ]; then
-        env_file="--env-file .env.local"
+    else
+        echo "Warning: No environment file found."
+        echo "Create scripts/envs/local.env from scripts/envs/local.env.example"
     fi
 
     echo "Starting app on http://localhost:8080"
@@ -67,7 +70,6 @@ start() {
         --name "$CONTAINER_NAME" \
         -p 8080:8080 \
         $env_file \
-        -e REDIRECT_URI=http://localhost:8080/auth/callback \
         "$IMAGE_NAME"
 
     echo "Container started. Use './gt logs' to see output."
@@ -173,7 +175,8 @@ gcp() {
             gcp_auth "$@"
             ;;
         deploy)
-            gcp_deploy
+            shift
+            gcp_deploy "$@"
             ;;
         domain)
             shift
@@ -183,11 +186,15 @@ gcp() {
             echo "Usage: ./gt gcp <subcommand>"
             echo ""
             echo "Subcommands:"
-            echo "  setup         Create GCP project and enable APIs"
-            echo "  oauth         Configure OAuth credentials"
-            echo "  auth          Authenticate with Google Cloud"
-            echo "  deploy        Deploy to Cloud Run"
-            echo "  domain <name> Map a custom domain to Cloud Run"
+            echo "  auth                    Authenticate with Google Cloud"
+            echo "  deploy <env>            Deploy to Cloud Run (staging|prod)"
+            echo "  domain <env> <domain>   Map a custom domain to environment"
+            echo ""
+            echo "Examples:"
+            echo "  ./gt gcp auth"
+            echo "  ./gt gcp deploy staging"
+            echo "  ./gt gcp deploy prod"
+            echo "  ./gt gcp domain staging grants-staging.example.com"
             ;;
         *)
             echo "Unknown gcp subcommand: $subcmd"
@@ -231,28 +238,32 @@ gcp_run() {
 }
 
 gcp_domain() {
-    local domain="${1:-}"
-    if [ -z "$domain" ]; then
-        echo "Usage: ./gt gcp domain <domain-name>"
+    local env="${1:-}"
+    local domain="${2:-}"
+
+    if [ -z "$env" ] || [ -z "$domain" ]; then
+        echo "Usage: ./gt gcp domain <environment> <domain-name>"
         echo ""
-        echo "Example: ./gt gcp domain grants.example.org"
+        echo "Examples:"
+        echo "  ./gt gcp domain staging grants-staging.example.org"
+        echo "  ./gt gcp domain prod grants.example.org"
         exit 1
     fi
 
-    # Load config
-    if [ ! -f "scripts/gcp-config.env" ]; then
-        echo "Error: scripts/gcp-config.env not found"
+    # Load environment config
+    if [ ! -f "scripts/envs/${env}.env" ]; then
+        echo "Error: scripts/envs/${env}.env not found"
         exit 1
     fi
-    source scripts/gcp-config.env
+    source "scripts/envs/${env}.env"
 
     GCP_REGION="${GCP_REGION:-us-central1}"
-    SERVICE_NAME="${SERVICE_NAME:-grant-tracker}"
 
     echo "=== Custom Domain Mapping ==="
-    echo "Domain:   $domain"
-    echo "Service:  $SERVICE_NAME"
-    echo "Region:   $GCP_REGION"
+    echo "Environment: $env"
+    echo "Domain:      $domain"
+    echo "Service:     $SERVICE_NAME"
+    echo "Region:      $GCP_REGION"
     echo ""
 
     # Check if dev image exists (needed for gcloud)
@@ -262,6 +273,14 @@ gcp_domain() {
     fi
 
     mkdir -p "$(pwd)/.gcloud"
+
+    # Set project
+    docker run --rm \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -w /workspace \
+        "$DEV_IMAGE_NAME" \
+        gcloud config set project "$GCP_PROJECT_ID"
 
     # Create domain mapping (requires beta track for --region flag)
     echo "Creating domain mapping..."
@@ -303,15 +322,25 @@ gcp_domain() {
 }
 
 gcp_deploy() {
-    # Check for config file
-    if [ ! -f "scripts/gcp-config.env" ]; then
-        echo "Error: scripts/gcp-config.env not found"
+    local env="${1:-}"
+    if [ -z "$env" ]; then
+        echo "Usage: ./gt gcp deploy <environment>"
+        echo ""
+        echo "Environments:"
+        echo "  staging   Deploy to staging (grants-staging.alpha-omega.fund)"
+        echo "  prod      Deploy to production (grants.alpha-omega.fund)"
+        exit 1
+    fi
+
+    # Check for environment config file
+    if [ ! -f "scripts/envs/${env}.env" ]; then
+        echo "Error: scripts/envs/${env}.env not found"
         echo ""
         echo "To set up deployment:"
-        echo "  1. cp scripts/gcp-config.env.example scripts/gcp-config.env"
-        echo "  2. Edit scripts/gcp-config.env with your GCP project and OAuth credentials"
+        echo "  1. cp scripts/envs/${env}.env.example scripts/envs/${env}.env"
+        echo "  2. Edit scripts/envs/${env}.env with your credentials"
         echo "  3. Run: ./gt gcp auth"
-        echo "  4. Run: ./gt gcp deploy"
+        echo "  4. Run: ./gt gcp deploy ${env}"
         exit 1
     fi
 
@@ -322,7 +351,6 @@ gcp_deploy() {
     fi
 
     # Run deploy script in dev container (has gcloud installed)
-    # Mount Docker socket so we can build/push from inside container
     mkdir -p "$(pwd)/.gcloud"
 
     docker run --rm -it \
@@ -331,7 +359,7 @@ gcp_deploy() {
         -v /var/run/docker.sock:/var/run/docker.sock \
         -w /workspace \
         "$DEV_IMAGE_NAME" \
-        /workspace/scripts/deploy.sh
+        /workspace/scripts/deploy.sh "$env"
 }
 
 case "${1:-}" in

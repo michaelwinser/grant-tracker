@@ -31,8 +31,11 @@ npm-debug.log*
 # Cache
 .cache/
 
-# GCP configuration (contains project-specific values)
+# GCP configuration (contains secrets)
 scripts/gcp-config.env
+scripts/envs/local.env
+scripts/envs/staging.env
+scripts/envs/prod.env
 
 # GCP credentials (local gcloud config)
 .gcloud/
