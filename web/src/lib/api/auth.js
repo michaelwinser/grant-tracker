@@ -21,6 +21,13 @@ let googleAuthPromise = null;
 // Auth mode: 'server' | 'client' | null (auto-detect)
 const AUTH_MODE_KEY = 'gt_auth_mode';
 
+// Extended scope preference
+const EXTENDED_SCOPE_KEY = 'gt_extended_scope';
+
+// OAuth scopes
+const BASE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file';
+const EXTENDED_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+
 /**
  * Get the user's preferred auth mode from localStorage.
  * Returns null if no preference set (auto-detect).
@@ -38,6 +45,26 @@ export function setAuthModePreference(mode) {
     localStorage.setItem(AUTH_MODE_KEY, mode);
   } else {
     localStorage.removeItem(AUTH_MODE_KEY);
+  }
+}
+
+/**
+ * Get whether extended file access (drive.readonly) is enabled.
+ * @returns {boolean}
+ */
+export function hasExtendedScope() {
+  return localStorage.getItem(EXTENDED_SCOPE_KEY) === 'true';
+}
+
+/**
+ * Set the extended scope preference.
+ * @param {boolean} enabled
+ */
+export function setExtendedScope(enabled) {
+  if (enabled) {
+    localStorage.setItem(EXTENDED_SCOPE_KEY, 'true');
+  } else {
+    localStorage.removeItem(EXTENDED_SCOPE_KEY);
   }
 }
 
@@ -245,15 +272,21 @@ function loadGoogleSignIn() {
 /**
  * Sign in using client-side Google Sign-In (popup).
  * @param {string} clientId - Google OAuth client ID
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.extendedScope] - Request extended file access
  * @returns {Promise<{user: Object, accessToken: string}>}
  */
-export async function signInClient(clientId) {
+export async function signInClient(clientId, options = {}) {
   await loadGoogleSignIn();
+
+  // Use extended scope if requested or if previously enabled
+  const useExtended = options.extendedScope || hasExtendedScope();
+  const scope = useExtended ? EXTENDED_SCOPES : BASE_SCOPES;
 
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
+      scope,
       callback: async (tokenResponse) => {
         if (tokenResponse.error) {
           reject(new Error(tokenResponse.error));
@@ -273,6 +306,68 @@ export async function signInClient(clientId) {
           );
 
           // Set auth mode preference
+          setAuthModePreference('client');
+
+          // Track if extended scope was requested/granted
+          if (options.extendedScope) {
+            setExtendedScope(true);
+          }
+
+          resolve({
+            user,
+            accessToken: tokenResponse.access_token,
+          });
+        } catch (err) {
+          reject(err);
+        }
+      },
+    });
+
+    client.requestAccessToken();
+  });
+}
+
+/**
+ * Request extended file access (drive.readonly scope).
+ * This triggers a re-authentication with the additional scope.
+ * @param {string} clientId - Google OAuth client ID
+ * @returns {Promise<{user: Object, accessToken: string}>}
+ */
+export async function requestExtendedAccess(clientId) {
+  return signInClient(clientId, { extendedScope: true });
+}
+
+/**
+ * Revoke extended file access.
+ * Clears the preference and triggers re-auth with base scope.
+ * @param {string} clientId - Google OAuth client ID
+ * @returns {Promise<{user: Object, accessToken: string}>}
+ */
+export async function revokeExtendedAccess(clientId) {
+  setExtendedScope(false);
+
+  await loadGoogleSignIn();
+
+  return new Promise((resolve, reject) => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: BASE_SCOPES,
+      callback: async (tokenResponse) => {
+        if (tokenResponse.error) {
+          reject(new Error(tokenResponse.error));
+          return;
+        }
+
+        try {
+          const user = await getUserInfo(tokenResponse.access_token);
+
+          localStorage.setItem('gt_access_token', tokenResponse.access_token);
+          localStorage.setItem('gt_user', JSON.stringify(user));
+          localStorage.setItem(
+            'gt_token_expiry',
+            String(Date.now() + tokenResponse.expires_in * 1000)
+          );
+
           setAuthModePreference('client');
 
           resolve({

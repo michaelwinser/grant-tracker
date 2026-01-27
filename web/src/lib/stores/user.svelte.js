@@ -14,6 +14,9 @@ import {
   scheduleTokenRefresh,
   cancelTokenRefresh,
   getAuthMode,
+  hasExtendedScope as checkExtendedScope,
+  requestExtendedAccess,
+  revokeExtendedAccess,
 } from '../api/auth.js';
 import { configStore } from './config.svelte.js';
 
@@ -22,6 +25,7 @@ let user = $state(null);
 let accessToken = $state(null);
 let isLoading = $state(true);
 let error = $state(null);
+let extendedScopeEnabled = $state(checkExtendedScope());
 
 // Derived state
 const isAuthenticated = $derived(user !== null && accessToken !== null);
@@ -173,6 +177,40 @@ function handleTokenRefreshError(err) {
   accessToken = null;
 }
 
+/**
+ * Enable extended file access (drive.readonly scope).
+ * Triggers re-authentication to request the additional permission.
+ * @returns {Promise<void>}
+ */
+async function enableExtendedAccess() {
+  const clientId = configStore.clientId;
+  if (!clientId) {
+    throw new Error('No client ID configured');
+  }
+
+  const result = await requestExtendedAccess(clientId);
+  user = result.user;
+  accessToken = result.accessToken;
+  extendedScopeEnabled = true;
+}
+
+/**
+ * Disable extended file access.
+ * Triggers re-authentication with only the base permissions.
+ * @returns {Promise<void>}
+ */
+async function disableExtendedAccess() {
+  const clientId = configStore.clientId;
+  if (!clientId) {
+    throw new Error('No client ID configured');
+  }
+
+  const result = await revokeExtendedAccess(clientId);
+  user = result.user;
+  accessToken = result.accessToken;
+  extendedScopeEnabled = false;
+}
+
 // Export the store interface
 export const userStore = {
   // State getters (reactive)
@@ -191,6 +229,9 @@ export const userStore = {
   get isAuthenticated() {
     return isAuthenticated;
   },
+  get hasExtendedAccess() {
+    return extendedScopeEnabled;
+  },
 
   // Actions
   initialize,
@@ -200,4 +241,6 @@ export const userStore = {
   validateTeamMember,
   setAccessDenied,
   clearError,
+  enableExtendedAccess,
+  disableExtendedAccess,
 };

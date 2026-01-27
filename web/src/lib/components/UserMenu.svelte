@@ -1,8 +1,10 @@
 <script>
   import { userStore } from '../stores/user.svelte.js';
+  import { getAuthMode } from '../api/auth.js';
 
   let isOpen = $state(false);
   let menuRef = $state(null);
+  let isTogglingAccess = $state(false);
 
   function toggleMenu() {
     isOpen = !isOpen;
@@ -16,6 +18,29 @@
     closeMenu();
     await userStore.signOut();
   }
+
+  async function handleToggleExtendedAccess() {
+    // Only available for client-side auth
+    if (getAuthMode() !== 'client') {
+      return;
+    }
+
+    isTogglingAccess = true;
+    try {
+      if (userStore.hasExtendedAccess) {
+        await userStore.disableExtendedAccess();
+      } else {
+        await userStore.enableExtendedAccess();
+      }
+    } catch (err) {
+      console.error('Failed to toggle extended access:', err);
+    } finally {
+      isTogglingAccess = false;
+    }
+  }
+
+  // Check if extended access option should be shown (client-side auth only)
+  let showExtendedOption = $derived(getAuthMode() === 'client');
 
   function handleClickOutside(event) {
     if (menuRef && !menuRef.contains(event.target)) {
@@ -94,6 +119,25 @@
           {userStore.user?.email || ''}
         </p>
       </div>
+      {#if showExtendedOption}
+        <div class="px-4 py-3 border-b border-gray-100">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={userStore.hasExtendedAccess}
+              onchange={handleToggleExtendedAccess}
+              disabled={isTogglingAccess}
+              class="mt-0.5 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 disabled:opacity-50"
+            />
+            <div class="flex-1 min-w-0">
+              <span class="text-sm font-medium text-gray-900">Extended file access</span>
+              <p class="text-xs text-gray-500 mt-0.5">
+                See all files in grant folders, not just files added through this app
+              </p>
+            </div>
+          </label>
+        </div>
+      {/if}
       <div class="py-1">
         <button
           onclick={handleSignOut}
