@@ -33,7 +33,7 @@ const openItems = $derived(
   actionItems.filter((item) => item.status === ActionItemStatus.OPEN)
 );
 
-const myItems = $derived(() => {
+const myItems = $derived.by(() => {
   const userEmail = userStore.user?.email?.toLowerCase();
   if (!userEmail) return [];
   return actionItems.filter(
@@ -43,7 +43,7 @@ const myItems = $derived(() => {
   );
 });
 
-const overdueItems = $derived(() => {
+const overdueItems = $derived.by(() => {
   const today = todayDate();
   return actionItems.filter(
     (item) =>
@@ -53,7 +53,7 @@ const overdueItems = $derived(() => {
   );
 });
 
-const itemsByGrant = $derived(() => {
+const itemsByGrant = $derived.by(() => {
   const grouped = {};
   for (const item of actionItems) {
     const grantId = item.grant_id || '_ungrouped';

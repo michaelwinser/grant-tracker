@@ -108,28 +108,34 @@ export const SCHEMA = {
     'synced_comment_id',
     'comment_link',
   ],
-  Status: ['Status'],
+  Status: ['Status', 'SortOrder', 'IncludeInBudget', 'HideByDefault'],
   Tags: ['Name'],
   Approvers: ['Name'],
 };
 
 /**
  * Default status values for new spreadsheets.
+ * Each status has: name, sortOrder, includeInBudget, hideByDefault
  */
-export const DEFAULT_STATUS_VALUES = [
-  'Initial Contact',
-  'Meeting',
-  'Proposal Development',
-  'Stakeholder Review',
-  'Approved',
-  'Notification',
-  'Signing',
-  'Disbursement',
-  'Active',
-  'Finished',
-  'Rejected',
-  'Deferred',
+export const DEFAULT_STATUS_CONFIG = [
+  { status: 'Initial Contact', sortOrder: 10, includeInBudget: false, hideByDefault: false },
+  { status: 'Meeting', sortOrder: 20, includeInBudget: false, hideByDefault: false },
+  { status: 'Proposal Development', sortOrder: 30, includeInBudget: false, hideByDefault: false },
+  { status: 'Stakeholder Review', sortOrder: 40, includeInBudget: false, hideByDefault: false },
+  { status: 'Approved', sortOrder: 50, includeInBudget: false, hideByDefault: false },
+  { status: 'Notification', sortOrder: 60, includeInBudget: true, hideByDefault: false },
+  { status: 'Signing', sortOrder: 70, includeInBudget: true, hideByDefault: false },
+  { status: 'Disbursement', sortOrder: 80, includeInBudget: true, hideByDefault: false },
+  { status: 'Active', sortOrder: 90, includeInBudget: true, hideByDefault: false },
+  { status: 'Finished', sortOrder: 100, includeInBudget: true, hideByDefault: true },
+  { status: 'Rejected', sortOrder: 999, includeInBudget: false, hideByDefault: true },
+  { status: 'Deferred', sortOrder: 998, includeInBudget: false, hideByDefault: true },
 ];
+
+/**
+ * Default status values for new spreadsheets (legacy format for backwards compatibility).
+ */
+export const DEFAULT_STATUS_VALUES = DEFAULT_STATUS_CONFIG.map(s => s.status);
 
 /**
  * Default tag values for new spreadsheets.
@@ -205,6 +211,7 @@ export async function validateSchema(accessToken, spreadsheetId) {
   if (missingSheets.length === 0) {
     await ensureGrantsColumns(accessToken, spreadsheetId);
     await ensureActionItemsColumns(accessToken, spreadsheetId);
+    await ensureStatusColumns(accessToken, spreadsheetId);
   }
 
   return {
@@ -350,6 +357,131 @@ async function ensureActionItemsColumns(accessToken, spreadsheetId) {
 }
 
 /**
+ * Ensure the Status sheet has all required columns (SortOrder, IncludeInBudget, HideByDefault).
+ * Adds missing columns and populates default values based on DEFAULT_STATUS_CONFIG.
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ */
+async function ensureStatusColumns(accessToken, spreadsheetId) {
+  try {
+    // Read current Status sheet headers
+    const response = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!1:1`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // Status sheet may not exist, skip
+      console.warn('Status sheet not found, skipping column check');
+      return;
+    }
+
+    const data = await response.json();
+    const currentHeaders = data.values?.[0] || [];
+    const requiredHeaders = SCHEMA.Status;
+
+    // Find missing columns
+    const missingHeaders = requiredHeaders.filter(
+      (h) => !currentHeaders.includes(h)
+    );
+
+    if (missingHeaders.length === 0) {
+      return; // All columns exist
+    }
+
+    console.log('Adding missing columns to Status sheet:', missingHeaders);
+
+    // First, add the missing headers
+    const startColumn = currentHeaders.length;
+    const endColumn = startColumn + missingHeaders.length;
+    const startColLetter = columnIndexToLetter(startColumn);
+    const endColLetter = columnIndexToLetter(endColumn - 1);
+
+    const headerResponse = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!${startColLetter}1:${endColLetter}1?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: [missingHeaders],
+        }),
+      }
+    );
+
+    if (!headerResponse.ok) {
+      console.warn('Failed to add Status headers:', await headerResponse.text());
+      return;
+    }
+
+    // Now read existing status names to populate defaults
+    const statusResponse = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!A2:A?majorDimension=COLUMNS`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!statusResponse.ok) {
+      return;
+    }
+
+    const statusData = await statusResponse.json();
+    const existingStatuses = statusData.values?.[0] || [];
+
+    if (existingStatuses.length === 0) {
+      return;
+    }
+
+    // Build default values for each existing status
+    const newColumnData = existingStatuses.map((statusName) => {
+      const defaultConfig = DEFAULT_STATUS_CONFIG.find(d => d.status === statusName);
+      const row = [];
+
+      // For each missing header, add the appropriate default value
+      missingHeaders.forEach((header) => {
+        if (header === 'SortOrder') {
+          row.push(defaultConfig?.sortOrder ?? 999);
+        } else if (header === 'IncludeInBudget') {
+          row.push(defaultConfig?.includeInBudget ? 'TRUE' : 'FALSE');
+        } else if (header === 'HideByDefault') {
+          row.push(defaultConfig?.hideByDefault ? 'TRUE' : 'FALSE');
+        }
+      });
+
+      return row;
+    });
+
+    // Write the default values
+    const dataResponse = await fetch(
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!${startColLetter}2:${endColLetter}${existingStatuses.length + 1}?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: newColumnData,
+        }),
+      }
+    );
+
+    if (!dataResponse.ok) {
+      console.warn('Failed to add Status default values:', await dataResponse.text());
+    }
+  } catch (err) {
+    console.warn('Error ensuring Status columns:', err);
+  }
+}
+
+/**
  * Convert a 0-indexed column number to a letter (0 = A, 25 = Z, 26 = AA).
  * @param {number} index - Column index (0-indexed)
  * @returns {string} - Column letter
@@ -476,8 +608,13 @@ async function applyBasicFormatting(accessToken, spreadsheetId, sheets) {
 async function addDefaultDropdownValues(accessToken, spreadsheetId) {
   const data = [
     {
-      range: 'Status!A2:A',
-      values: DEFAULT_STATUS_VALUES.map((s) => [s]),
+      range: 'Status!A2:D',
+      values: DEFAULT_STATUS_CONFIG.map((s) => [
+        s.status,
+        s.sortOrder,
+        s.includeInBudget ? 'TRUE' : 'FALSE',
+        s.hideByDefault ? 'TRUE' : 'FALSE',
+      ]),
     },
     {
       range: 'Tags!A2:A',
@@ -560,15 +697,35 @@ export async function initializeMissingSheets(accessToken, spreadsheetId, missin
 }
 
 /**
- * Read dropdown values from the Status sheet.
+ * Parse a boolean value from a cell (handles TRUE/FALSE strings and actual booleans).
+ * @param {any} value - Cell value
+ * @param {boolean} defaultValue - Default if value is empty/undefined
+ * @returns {boolean}
+ */
+function parseBooleanCell(value, defaultValue = false) {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return value.toUpperCase() === 'TRUE';
+  }
+  return Boolean(value);
+}
+
+/**
+ * Read full status configuration from the Status sheet.
+ * Returns objects with status name and metadata (sortOrder, includeInBudget, hideByDefault).
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
- * @returns {Promise<string[]>} - List of status values
+ * @returns {Promise<Array<{status: string, sortOrder: number, includeInBudget: boolean, hideByDefault: boolean}>>}
  */
-export async function readStatusValues(accessToken, spreadsheetId) {
+export async function readStatusConfig(accessToken, spreadsheetId) {
   try {
     const response = await fetch(
-      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!A2:A?majorDimension=COLUMNS`,
+      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!A2:D?majorDimension=ROWS`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
       }
@@ -576,15 +733,50 @@ export async function readStatusValues(accessToken, spreadsheetId) {
 
     if (!response.ok) {
       // Status sheet may not exist, return defaults
-      return DEFAULT_STATUS_VALUES;
+      return DEFAULT_STATUS_CONFIG;
     }
 
     const data = await response.json();
-    const values = data.values?.[0] || [];
-    return values.length > 0 ? values : DEFAULT_STATUS_VALUES;
+    const rows = data.values || [];
+
+    if (rows.length === 0) {
+      return DEFAULT_STATUS_CONFIG;
+    }
+
+    // Parse rows into status config objects
+    const config = rows
+      .filter(row => row[0]) // Filter out empty rows
+      .map((row, index) => {
+        const status = row[0];
+        // Find default config for this status to get fallback values
+        const defaultConfig = DEFAULT_STATUS_CONFIG.find(d => d.status === status);
+
+        return {
+          status,
+          sortOrder: row[1] !== undefined && row[1] !== '' ? parseInt(row[1], 10) : (defaultConfig?.sortOrder ?? (index + 1) * 10),
+          includeInBudget: parseBooleanCell(row[2], defaultConfig?.includeInBudget ?? false),
+          hideByDefault: parseBooleanCell(row[3], defaultConfig?.hideByDefault ?? false),
+        };
+      });
+
+    // Sort by sortOrder
+    config.sort((a, b) => a.sortOrder - b.sortOrder);
+
+    return config;
   } catch {
-    return DEFAULT_STATUS_VALUES;
+    return DEFAULT_STATUS_CONFIG;
   }
+}
+
+/**
+ * Read dropdown values from the Status sheet (legacy function for backwards compatibility).
+ * @param {string} accessToken - OAuth access token
+ * @param {string} spreadsheetId - Spreadsheet ID
+ * @returns {Promise<string[]>} - List of status values
+ */
+export async function readStatusValues(accessToken, spreadsheetId) {
+  const config = await readStatusConfig(accessToken, spreadsheetId);
+  return config.map(s => s.status);
 }
 
 /**

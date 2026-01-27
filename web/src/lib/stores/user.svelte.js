@@ -6,13 +6,16 @@
 import {
   initializeAuth,
   signIn as authSignIn,
+  signInClient,
   signOut as authSignOut,
   getAccessToken,
   getUserFromCookie,
   refreshToken,
   scheduleTokenRefresh,
   cancelTokenRefresh,
+  getAuthMode,
 } from '../api/auth.js';
+import { configStore } from './config.svelte.js';
 
 // Reactive state
 let user = $state(null);
@@ -62,10 +65,28 @@ async function initialize() {
 }
 
 /**
- * Sign in with Google via server redirect.
+ * Sign in with Google.
+ * Uses server-side auth if available, otherwise uses client-side popup.
  */
-function signIn() {
-  authSignIn();
+async function signIn() {
+  const authMode = getAuthMode();
+
+  if (authMode === 'server') {
+    // Server-side auth - redirect to login endpoint
+    authSignIn();
+  } else {
+    // Client-side auth - use popup
+    const clientId = configStore.clientId;
+    if (!clientId) {
+      throw new Error('No client ID configured');
+    }
+
+    const result = await signInClient(clientId);
+    user = result.user;
+    accessToken = result.accessToken;
+    isLoading = false;
+    error = null;
+  }
 }
 
 /**

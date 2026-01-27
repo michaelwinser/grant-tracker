@@ -51,6 +51,44 @@ export function navigate(path) {
 }
 
 /**
+ * Update query parameters on the current route.
+ * @param {Object} updates - Key-value pairs to update (null/undefined values remove the key)
+ */
+export function updateQuery(updates) {
+  const newQuery = { ...query };
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (value === null || value === undefined || value === '') {
+      delete newQuery[key];
+    } else {
+      newQuery[key] = value;
+    }
+  }
+
+  // Build the new URL
+  const basePath = currentPath;
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(newQuery)) {
+    searchParams.set(key, value);
+  }
+
+  const queryString = searchParams.toString();
+  const newPath = queryString ? `${basePath}?${queryString}` : basePath;
+
+  // Use replaceState to avoid cluttering history for filter changes
+  window.history.replaceState(null, '', `#${newPath}`);
+  parseHash();
+}
+
+/**
+ * Get the current year.
+ * @returns {number}
+ */
+export function getCurrentYear() {
+  return new Date().getFullYear();
+}
+
+/**
  * Get the current route name.
  * @returns {string} - 'dashboard', 'grants', 'grant-detail', 'action-items', or 'not-found'
  */
@@ -91,4 +129,6 @@ export const router = {
     return getRoute();
   },
   navigate,
+  updateQuery,
+  getCurrentYear,
 };

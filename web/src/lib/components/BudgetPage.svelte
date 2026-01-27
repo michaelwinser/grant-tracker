@@ -1,14 +1,24 @@
 <script>
   import { grantsStore } from '../stores/grants.svelte.js';
-  import { navigate } from '../router.svelte.js';
+  import { router, navigate, updateQuery, getCurrentYear } from '../router.svelte.js';
   import { onMount } from 'svelte';
   import { Chart, registerables } from 'chart.js';
 
   // Register Chart.js components
   Chart.register(...registerables);
 
-  // Filter state
-  let yearFilter = $state('');
+  // Initialize from URL or default to current year
+  const currentYear = getCurrentYear();
+  let yearFilter = $state(router.query.year || String(currentYear));
+  let lastYearUpdate = yearFilter;
+
+  // Update URL when year filter changes (with loop prevention)
+  $effect(() => {
+    if (yearFilter !== lastYearUpdate) {
+      lastYearUpdate = yearFilter;
+      updateQuery({ year: yearFilter === '' ? null : yearFilter });
+    }
+  });
 
   // Chart instances
   let pieChart = null;
@@ -24,26 +34,42 @@
     { key: 'D', label: 'Category D', color: 'rgb(168, 85, 247)', bgColor: 'rgba(168, 85, 247, 0.8)' },
   ];
 
-  // Get unique years from grants
-  let availableYears = $derived(() => {
+  // Get unique years from grants (as strings for select binding)
+  let availableYears = $derived.by(() => {
     const years = new Set();
     grantsStore.grants.forEach(g => {
-      if (g.Year) years.add(g.Year);
+      if (g.Year) years.add(String(g.Year));
     });
-    return Array.from(years).sort((a, b) => b - a);
+    return Array.from(years).sort((a, b) => parseInt(b) - parseInt(a));
   });
 
-  // Filter grants by year
-  let filteredGrants = $derived(() => {
-    if (!yearFilter) return grantsStore.grants;
-    return grantsStore.grants.filter(g => g.Year === parseInt(yearFilter));
+  // Filter grants by year AND budget inclusion (based on status)
+  let filteredGrants = $derived.by(() => {
+    const budgetStatuses = grantsStore.budgetStatuses;
+    let result = grantsStore.grants.filter(g => budgetStatuses.includes(g.Status));
+
+    if (yearFilter) {
+      result = result.filter(g => g.Year === parseInt(yearFilter));
+    }
+
+    return result;
+  });
+
+  // Count of grants excluded from budget (for info display)
+  let excludedCount = $derived.by(() => {
+    const budgetStatuses = grantsStore.budgetStatuses;
+    let allGrants = grantsStore.grants;
+    if (yearFilter) {
+      allGrants = allGrants.filter(g => g.Year === parseInt(yearFilter));
+    }
+    return allGrants.filter(g => !budgetStatuses.includes(g.Status)).length;
   });
 
   // Calculate budget by category for filtered grants
-  let categoryBudgets = $derived(() => {
+  let categoryBudgets = $derived.by(() => {
     const budgets = { A: 0, B: 0, C: 0, D: 0 };
 
-    filteredGrants().forEach(grant => {
+    filteredGrants.forEach(grant => {
       const amount = parseFloat(grant.Amount) || 0;
       const pctA = parseFloat(grant.Cat_A_Percent) || 0;
       const pctB = parseFloat(grant.Cat_B_Percent) || 0;
@@ -60,21 +86,17 @@
   });
 
   // Calculate total budget
-  let totalBudget = $derived(() => {
-    const b = categoryBudgets();
-    return b.A + b.B + b.C + b.D;
-  });
+  let totalBudget = $derived(categoryBudgets.A + categoryBudgets.B + categoryBudgets.C + categoryBudgets.D);
 
   // Calculate budget by year (for bar chart)
-  let budgetByYear = $derived(() => {
-    const years = availableYears();
+  let budgetByYear = $derived.by(() => {
     const yearData = {};
 
-    years.forEach(year => {
+    availableYears.forEach(year => {
       yearData[year] = { A: 0, B: 0, C: 0, D: 0 };
 
       grantsStore.grants
-        .filter(g => g.Year === year)
+        .filter(g => g.Year === parseInt(year))
         .forEach(grant => {
           const amount = parseFloat(grant.Amount) || 0;
           const pctA = parseFloat(grant.Cat_A_Percent) || 0;
@@ -93,8 +115,8 @@
   });
 
   // Grant breakdown with calculated category amounts
-  let grantBreakdown = $derived(() => {
-    return filteredGrants().map(grant => {
+  let grantBreakdown = $derived.by(() => {
+    return filteredGrants.map(grant => {
       const amount = parseFloat(grant.Amount) || 0;
       const pctA = parseFloat(grant.Cat_A_Percent) || 0;
       const pctB = parseFloat(grant.Cat_B_Percent) || 0;
@@ -126,8 +148,8 @@
 
   // Update charts when data changes
   $effect(() => {
-    const budgets = categoryBudgets();
-    const yearData = budgetByYear();
+    const budgets = categoryBudgets;
+    const yearData = budgetByYear;
 
     if (pieCanvas && budgets) {
       updatePieChart(budgets);
@@ -259,7 +281,10 @@
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Budget Overview</h1>
       <p class="text-gray-500 mt-1">
-        {filteredGrants().length} grants · {formatCurrency(totalBudget())} total
+        {filteredGrants.length} funded grants · {formatCurrency(totalBudget)} total
+        {#if excludedCount > 0}
+          <span class="text-gray-400">· {excludedCount} pre-funding excluded</span>
+        {/if}
       </p>
     </div>
     <div class="w-40">
@@ -270,7 +295,7 @@
         class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
       >
         <option value="">All years</option>
-        {#each availableYears() as year}
+        {#each availableYears as year}
           <option value={year}>{year}</option>
         {/each}
       </select>
@@ -286,11 +311,11 @@
           <div class="w-3 h-3 rounded-full" style="background-color: {cat.color}"></div>
         </div>
         <p class="text-2xl font-bold text-gray-900 mt-2">
-          {formatCurrency(categoryBudgets()[cat.key])}
+          {formatCurrency(categoryBudgets[cat.key])}
         </p>
-        {#if totalBudget() > 0}
+        {#if totalBudget > 0}
           <p class="text-xs text-gray-500 mt-1">
-            {((categoryBudgets()[cat.key] / totalBudget()) * 100).toFixed(1)}% of total
+            {((categoryBudgets[cat.key] / totalBudget) * 100).toFixed(1)}% of total
           </p>
         {/if}
       </div>
@@ -327,7 +352,7 @@
       <h3 class="text-lg font-medium text-gray-900">Grant-by-Grant Breakdown</h3>
     </div>
 
-    {#if filteredGrants().length === 0}
+    {#if filteredGrants.length === 0}
       <div class="p-12 text-center">
         <p class="text-gray-500">No grants to display.</p>
       </div>
@@ -360,7 +385,7 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            {#each grantBreakdown() as row (row.ID)}
+            {#each grantBreakdown as row (row.ID)}
               <tr class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap">
                   <button
@@ -394,22 +419,22 @@
           <tfoot class="bg-gray-50">
             <tr class="font-semibold">
               <td class="px-6 py-4 text-sm text-gray-900" colspan="2">
-                Total ({grantBreakdown().length} grants)
+                Total ({grantBreakdown.length} grants)
               </td>
               <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                {formatCurrency(totalBudget())}
+                {formatCurrency(totalBudget)}
               </td>
               <td class="px-6 py-4 text-sm text-blue-700 text-right">
-                {formatCurrency(categoryBudgets().A)}
+                {formatCurrency(categoryBudgets.A)}
               </td>
               <td class="px-6 py-4 text-sm text-green-700 text-right">
-                {formatCurrency(categoryBudgets().B)}
+                {formatCurrency(categoryBudgets.B)}
               </td>
               <td class="px-6 py-4 text-sm text-orange-700 text-right">
-                {formatCurrency(categoryBudgets().C)}
+                {formatCurrency(categoryBudgets.C)}
               </td>
               <td class="px-6 py-4 text-sm text-purple-700 text-right">
-                {formatCurrency(categoryBudgets().D)}
+                {formatCurrency(categoryBudgets.D)}
               </td>
             </tr>
           </tfoot>

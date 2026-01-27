@@ -6,7 +6,7 @@
 import { createSheetsClient } from '../api/sheetsClient.js';
 import { userStore } from './user.svelte.js';
 import { spreadsheetStore } from './spreadsheet.svelte.js';
-import { readStatusValues, DEFAULT_STATUS_VALUES } from '../api/sheets.js';
+import { readStatusConfig, DEFAULT_STATUS_CONFIG } from '../api/sheets.js';
 
 /**
  * Fields that contain numeric data.
@@ -29,19 +29,45 @@ const TERMINAL_STATUSES = ['Finished', 'Rejected', 'Deferred'];
 
 // Reactive state
 let grants = $state([]);
-let statusValues = $state(DEFAULT_STATUS_VALUES);
+let statusConfig = $state(DEFAULT_STATUS_CONFIG);
 let isLoading = $state(false);
 let error = $state(null);
 let lastLoaded = $state(null);
 
-// Derived state
-const grantsByStatus = $derived(() => {
+// Derived state - status names list (for backwards compatibility and dropdowns)
+const statusValues = $derived(statusConfig.map(s => s.status));
+
+// Derived state - visible statuses (not hidden by default)
+const visibleStatuses = $derived(
+  statusConfig.filter(s => !s.hideByDefault).map(s => s.status)
+);
+
+// Derived state - hidden statuses
+const hiddenStatuses = $derived(
+  statusConfig.filter(s => s.hideByDefault).map(s => s.status)
+);
+
+// Derived state - statuses included in budget
+const budgetStatuses = $derived(
+  statusConfig.filter(s => s.includeInBudget).map(s => s.status)
+);
+
+// Derived state - status sort order map
+const statusSortOrder = $derived.by(() => {
+  const orderMap = {};
+  statusConfig.forEach(s => {
+    orderMap[s.status] = s.sortOrder;
+  });
+  return orderMap;
+});
+
+const grantsByStatus = $derived.by(() => {
   const grouped = {};
-  for (const status of statusValues) {
-    grouped[status] = [];
+  for (const s of statusConfig) {
+    grouped[s.status] = [];
   }
   for (const grant of grants) {
-    const status = grant.Status || statusValues[0];
+    const status = grant.Status || statusConfig[0]?.status;
     if (!grouped[status]) {
       grouped[status] = [];
     }
@@ -96,8 +122,8 @@ async function load() {
   try {
     const client = getClient();
 
-    // Load status values for dropdowns
-    statusValues = await readStatusValues(
+    // Load status config (includes sortOrder, includeInBudget, hideByDefault)
+    statusConfig = await readStatusConfig(
       userStore.accessToken,
       spreadsheetStore.spreadsheetId
     );
@@ -230,8 +256,23 @@ export const grantsStore = {
   get grants() {
     return grants;
   },
+  get statusConfig() {
+    return statusConfig;
+  },
   get statusValues() {
     return statusValues;
+  },
+  get visibleStatuses() {
+    return visibleStatuses;
+  },
+  get hiddenStatuses() {
+    return hiddenStatuses;
+  },
+  get budgetStatuses() {
+    return budgetStatuses;
+  },
+  get statusSortOrder() {
+    return statusSortOrder;
   },
   get isLoading() {
     return isLoading;
