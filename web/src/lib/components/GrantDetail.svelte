@@ -354,6 +354,17 @@
                 showFileConflictPrompt = true;
                 return; // Exit early, user will resolve via prompt
               }
+              // Check if this is an access/not found error - try creating a shortcut instead
+              if (isFileNotFoundError(err)) {
+                try {
+                  await createShortcut(userStore.accessToken, file.id, folderId);
+                  // Shortcut created successfully, continue to next file
+                  continue;
+                } catch (shortcutErr) {
+                  // Shortcut creation also failed - show helpful error
+                  throw new Error(`Cannot add "${file.name}": You don't have permission to modify this file or create a shortcut to it.`);
+                }
+              }
               throw err; // Re-throw other errors
             }
           }
@@ -372,6 +383,11 @@
   function isMultipleParentsError(err) {
     const msg = err.message?.toLowerCase() || '';
     return msg.includes('parent') || msg.includes('multiple') || msg.includes('shared drive');
+  }
+
+  function isFileNotFoundError(err) {
+    const msg = err.message?.toLowerCase() || '';
+    return msg.includes('file not found') || msg.includes('not found') || msg.includes('404');
   }
 
   async function handleAddReport() {
@@ -408,6 +424,17 @@
                 conflictContext = 'report';
                 showFileConflictPrompt = true;
                 return; // Exit early, user will resolve via prompt
+              }
+              // Check if this is an access/not found error - try creating a shortcut instead
+              if (isFileNotFoundError(err)) {
+                try {
+                  await createShortcut(userStore.accessToken, file.id, reportsFolderId);
+                  // Shortcut created successfully, continue to next file
+                  continue;
+                } catch (shortcutErr) {
+                  // Shortcut creation also failed - show helpful error
+                  throw new Error(`Cannot add "${file.name}": You don't have permission to modify this file or create a shortcut to it.`);
+                }
               }
               throw err; // Re-throw other errors
             }
@@ -460,6 +487,19 @@
     conflictFile = null;
     conflictTargetFolderId = null;
     conflictContext = null;
+  }
+
+  // Helper to get effective mimeType for display (resolves shortcuts)
+  function getEffectiveMimeType(file) {
+    if (file.mimeType === 'application/vnd.google-apps.shortcut' && file.shortcutDetails?.targetMimeType) {
+      return file.shortcutDetails.targetMimeType;
+    }
+    return file.mimeType;
+  }
+
+  // Check if file is a shortcut
+  function isShortcut(file) {
+    return file.mimeType === 'application/vnd.google-apps.shortcut';
   }
 
   // Get action items for this grant
@@ -811,6 +851,7 @@
           {:else}
             <ul class="divide-y divide-gray-100">
               {#each attachments as file (file.id)}
+                {@const effectiveMimeType = getEffectiveMimeType(file)}
                 <li class="py-3 first:pt-0 last:pb-0">
                   <a
                     href={file.webViewLink || `https://drive.google.com/file/d/${file.id}`}
@@ -818,24 +859,24 @@
                     rel="noopener noreferrer"
                     class="flex items-center gap-3 group"
                   >
-                    <div class="flex-shrink-0">
-                      {#if file.mimeType === 'application/vnd.google-apps.document'}
+                    <div class="flex-shrink-0 relative">
+                      {#if effectiveMimeType === 'application/vnd.google-apps.document'}
                         <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                         </svg>
-                      {:else if file.mimeType === 'application/vnd.google-apps.spreadsheet'}
+                      {:else if effectiveMimeType === 'application/vnd.google-apps.spreadsheet'}
                         <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                         </svg>
-                      {:else if file.mimeType === 'application/pdf'}
+                      {:else if effectiveMimeType === 'application/pdf'}
                         <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                         </svg>
-                      {:else if file.mimeType?.startsWith('image/')}
+                      {:else if effectiveMimeType?.startsWith('image/')}
                         <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                      {:else if file.mimeType === 'application/vnd.google-apps.folder'}
+                      {:else if effectiveMimeType === 'application/vnd.google-apps.folder'}
                         <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
                         </svg>
@@ -844,10 +885,18 @@
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       {/if}
+                      {#if isShortcut(file)}
+                        <svg class="w-3 h-3 absolute -bottom-0.5 -right-0.5 text-gray-600 bg-white rounded-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                        </svg>
+                      {/if}
                     </div>
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-medium text-gray-900 group-hover:text-indigo-600 truncate">
                         {file.name}
+                        {#if isShortcut(file)}
+                          <span class="text-xs text-gray-400 font-normal ml-1">(shortcut)</span>
+                        {/if}
                       </p>
                       {#if file.modifiedTime}
                         <p class="text-xs text-gray-500">
@@ -926,6 +975,7 @@
           {:else}
             <ul class="divide-y divide-gray-100">
               {#each reports as file (file.id)}
+                {@const effectiveMimeType = getEffectiveMimeType(file)}
                 <li class="py-3 first:pt-0 last:pb-0">
                   <a
                     href={file.webViewLink || `https://drive.google.com/file/d/${file.id}`}
@@ -933,12 +983,12 @@
                     rel="noopener noreferrer"
                     class="flex items-center gap-3 group"
                   >
-                    <div class="flex-shrink-0">
-                      {#if file.mimeType === 'application/pdf'}
+                    <div class="flex-shrink-0 relative">
+                      {#if effectiveMimeType === 'application/pdf'}
                         <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                         </svg>
-                      {:else if file.mimeType === 'application/vnd.google-apps.document'}
+                      {:else if effectiveMimeType === 'application/vnd.google-apps.document'}
                         <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                         </svg>
@@ -947,10 +997,18 @@
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                       {/if}
+                      {#if isShortcut(file)}
+                        <svg class="w-3 h-3 absolute -bottom-0.5 -right-0.5 text-gray-600 bg-white rounded-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                        </svg>
+                      {/if}
                     </div>
                     <div class="flex-1 min-w-0">
                       <p class="text-sm font-medium text-gray-900 group-hover:text-indigo-600 truncate">
                         {file.name}
+                        {#if isShortcut(file)}
+                          <span class="text-xs text-gray-400 font-normal ml-1">(shortcut)</span>
+                        {/if}
                       </p>
                       {#if file.modifiedTime}
                         <p class="text-xs text-gray-500">

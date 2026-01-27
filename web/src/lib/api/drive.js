@@ -64,9 +64,11 @@ export async function listFiles(accessToken, folderId, options = {}) {
 
   const params = new URLSearchParams({
     q: query,
-    fields: 'files(id, name, mimeType, modifiedTime, webViewLink)',
+    fields: 'files(id, name, mimeType, modifiedTime, webViewLink, shortcutDetails)',
     orderBy: 'name',
     pageSize: '1000',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
   });
 
   const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
@@ -98,6 +100,8 @@ export async function findFolder(accessToken, parentId, name) {
     q: query,
     fields: 'files(id, name)',
     pageSize: '1',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
   });
 
   const response = await fetch(`${DRIVE_API_BASE}/files?${params}`, {
