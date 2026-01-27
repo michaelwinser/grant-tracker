@@ -1,0 +1,7 @@
+# oapi-codegen configuration for Grant Tracker server
+package: api
+generate:
+  std-http-server: true
+  models: true
+  embedded-spec: true
+output: ../server/api/api.gen.go

@@ -1,0 +1,767 @@
+openapi: 3.0.3
+info:
+  title: Grant Tracker API
+  description: |
+    Backend API for Grant Tracker using service account for Google Sheets and Drive operations.
+
+    All endpoints require authentication via session cookie and verify the user has access
+    to the grants folder in Google Drive.
+  version: 1.0.0
+
+servers:
+  - url: /api
+    description: Local server
+
+tags:
+  - name: sheets
+    description: Google Sheets operations
+  - name: drive
+    description: Google Drive operations
+  - name: config
+    description: Application configuration
+
+paths:
+  /config:
+    get:
+      tags:
+        - config
+      summary: Get application configuration
+      description: Returns client configuration including OAuth client ID and service account status
+      operationId: getConfig
+      responses:
+        '200':
+          description: Configuration data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Config'
+
+  /sheets/read:
+    post:
+      tags:
+        - sheets
+      summary: Read data from a sheet
+      description: Reads all data from a sheet, returning headers and rows separately
+      operationId: readSheet
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadSheetRequest'
+      responses:
+        '200':
+          description: Sheet data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadSheetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sheets/append:
+    post:
+      tags:
+        - sheets
+      summary: Append a row to a sheet
+      description: Appends a new row to the end of a sheet
+      operationId: appendRow
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppendRowRequest'
+      responses:
+        '200':
+          description: Row appended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sheets/update:
+    post:
+      tags:
+        - sheets
+      summary: Update a row in a sheet
+      description: Updates fields in a row identified by an ID column value
+      operationId: updateRow
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRowRequest'
+      responses:
+        '200':
+          description: Row updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sheets/delete:
+    post:
+      tags:
+        - sheets
+      summary: Delete a row from a sheet
+      description: Deletes a row identified by an ID column value
+      operationId: deleteRow
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRowRequest'
+      responses:
+        '200':
+          description: Row deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sheets/batch-update:
+    post:
+      tags:
+        - sheets
+      summary: Batch update multiple cells
+      description: Updates multiple cells in a single request
+      operationId: batchUpdateCells
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchUpdateRequest'
+      responses:
+        '200':
+          description: Cells updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /drive/list:
+    post:
+      tags:
+        - drive
+      summary: List files in a folder
+      description: Lists all files in a Drive folder
+      operationId: listFiles
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListFilesRequest'
+      responses:
+        '200':
+          description: List of files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFilesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /drive/create-folder:
+    post:
+      tags:
+        - drive
+      summary: Create a folder
+      description: Creates a new folder in Google Drive
+      operationId: createFolder
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFolderRequest'
+      responses:
+        '200':
+          description: Folder created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateFolderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /drive/create-doc:
+    post:
+      tags:
+        - drive
+      summary: Create a document
+      description: Creates a new Google Doc, Sheet, or other document type
+      operationId: createDoc
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDocRequest'
+      responses:
+        '200':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDocResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /drive/create-shortcut:
+    post:
+      tags:
+        - drive
+      summary: Create a shortcut
+      description: Creates a shortcut to an existing file
+      operationId: createShortcut
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShortcutRequest'
+      responses:
+        '200':
+          description: Shortcut created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateShortcutResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /drive/move:
+    post:
+      tags:
+        - drive
+      summary: Move a file
+      description: Moves a file to a different folder
+      operationId: moveFile
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveFileRequest'
+      responses:
+        '200':
+          description: File moved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /drive/get:
+    post:
+      tags:
+        - drive
+      summary: Get file metadata
+      description: Gets metadata for a specific file
+      operationId: getFile
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetFileRequest'
+      responses:
+        '200':
+          description: File metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gt_access_token
+      description: Session access token cookie
+
+  schemas:
+    # Common schemas
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+
+    SuccessResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    # Config schemas
+    Config:
+      type: object
+      required:
+        - clientId
+        - serviceAccountEnabled
+      properties:
+        clientId:
+          type: string
+          description: Google OAuth client ID
+        serviceAccountEnabled:
+          type: boolean
+          description: Whether service account API is available
+        spreadsheetId:
+          type: string
+          description: ID of the Grant Tracker spreadsheet (only when service account enabled)
+        grantsFolderId:
+          type: string
+          description: ID of the grants root folder (only when service account enabled)
+
+    # Sheets schemas
+    ReadSheetRequest:
+      type: object
+      required:
+        - sheet
+      properties:
+        sheet:
+          type: string
+          description: Sheet name (e.g., 'Grants', 'ActionItems')
+          example: Grants
+        range:
+          type: string
+          description: Optional range (e.g., 'A1:Z')
+          example: A1:Z
+
+    ReadSheetResponse:
+      type: object
+      required:
+        - headers
+        - rows
+      properties:
+        headers:
+          type: array
+          items:
+            type: string
+          description: Column headers from first row
+          example: ["ID", "Title", "Status"]
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+          description: Data rows (excluding header row)
+
+    AppendRowRequest:
+      type: object
+      required:
+        - sheet
+        - row
+      properties:
+        sheet:
+          type: string
+          description: Sheet name
+          example: Grants
+        row:
+          type: object
+          additionalProperties: {}
+          description: Row data as key-value pairs where keys match column headers
+          example:
+            ID: "GRANT-2026-001"
+            Title: "New Grant"
+            Status: "Draft"
+
+    UpdateRowRequest:
+      type: object
+      required:
+        - sheet
+        - idColumn
+        - id
+        - data
+      properties:
+        sheet:
+          type: string
+          description: Sheet name
+          example: Grants
+        idColumn:
+          type: string
+          description: Column name containing the unique ID
+          example: ID
+        id:
+          type: string
+          description: Value of the ID to match
+          example: GRANT-2026-001
+        data:
+          type: object
+          additionalProperties: {}
+          description: Fields to update as key-value pairs
+          example:
+            Status: "Active"
+            Amount: 50000
+
+    DeleteRowRequest:
+      type: object
+      required:
+        - sheet
+        - idColumn
+        - id
+      properties:
+        sheet:
+          type: string
+          description: Sheet name
+          example: Grants
+        idColumn:
+          type: string
+          description: Column name containing the unique ID
+          example: ID
+        id:
+          type: string
+          description: Value of the ID to match
+          example: GRANT-2026-001
+
+    BatchUpdateRequest:
+      type: object
+      required:
+        - sheet
+        - updates
+      properties:
+        sheet:
+          type: string
+          description: Sheet name
+          example: Grants
+        updates:
+          type: array
+          items:
+            type: object
+            required:
+              - range
+              - values
+            properties:
+              range:
+                type: string
+                description: Cell range (e.g., 'A2:C2')
+                example: A2:C2
+              values:
+                type: array
+                items: {}
+                description: Values to set in the range
+
+    # Drive schemas
+    ShortcutDetails:
+      type: object
+      properties:
+        targetId:
+          type: string
+          description: ID of the file this shortcut points to
+        targetMimeType:
+          type: string
+          description: MIME type of the target file
+
+    FileInfo:
+      type: object
+      required:
+        - id
+        - name
+        - mimeType
+      properties:
+        id:
+          type: string
+          description: File ID
+        name:
+          type: string
+          description: File name
+        mimeType:
+          type: string
+          description: MIME type
+        modifiedTime:
+          type: string
+          format: date-time
+          description: Last modified timestamp
+        webViewLink:
+          type: string
+          format: uri
+          description: URL to view the file in browser
+        shortcutDetails:
+          $ref: '#/components/schemas/ShortcutDetails'
+
+    ListFilesRequest:
+      type: object
+      properties:
+        folderId:
+          type: string
+          description: Folder ID to list (defaults to grants folder)
+        query:
+          type: string
+          description: Additional Drive API query filter
+
+    ListFilesResponse:
+      type: object
+      required:
+        - files
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+
+    CreateFolderRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Folder name
+          example: GRANT-2026-Example
+        parentId:
+          type: string
+          description: Parent folder ID (defaults to grants folder)
+
+    CreateFolderResponse:
+      type: object
+      required:
+        - id
+        - url
+      properties:
+        id:
+          type: string
+          description: Created folder ID
+        url:
+          type: string
+          format: uri
+          description: URL to view the folder
+
+    CreateDocRequest:
+      type: object
+      required:
+        - name
+        - mimeType
+      properties:
+        name:
+          type: string
+          description: Document name
+          example: Project Notes
+        mimeType:
+          type: string
+          description: Document type
+          example: application/vnd.google-apps.document
+          enum:
+            - application/vnd.google-apps.document
+            - application/vnd.google-apps.spreadsheet
+            - application/vnd.google-apps.presentation
+        parentId:
+          type: string
+          description: Parent folder ID
+
+    CreateDocResponse:
+      type: object
+      required:
+        - id
+        - url
+      properties:
+        id:
+          type: string
+          description: Created document ID
+        url:
+          type: string
+          format: uri
+          description: URL to view/edit the document
+
+    CreateShortcutRequest:
+      type: object
+      required:
+        - targetId
+        - parentId
+      properties:
+        targetId:
+          type: string
+          description: ID of the file to create a shortcut to
+        parentId:
+          type: string
+          description: Folder to create the shortcut in
+        name:
+          type: string
+          description: Optional shortcut name (defaults to target's name)
+
+    CreateShortcutResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Created shortcut ID
+
+    MoveFileRequest:
+      type: object
+      required:
+        - fileId
+        - newParentId
+      properties:
+        fileId:
+          type: string
+          description: ID of the file to move
+        newParentId:
+          type: string
+          description: ID of the new parent folder
+        prevParentId:
+          type: string
+          description: ID of the previous parent folder (optional, will be detected if not provided)
+
+    GetFileRequest:
+      type: object
+      required:
+        - fileId
+      properties:
+        fileId:
+          type: string
+          description: ID of the file to get
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Access denied (no permission to grants folder)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalError:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

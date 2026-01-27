@@ -327,26 +327,29 @@ The existing StatusHistory sheet pattern should continue to work, but the "Chang
 
 ## Migration Plan
 
-### Phase 1: Backend Infrastructure
+### Phase 1: Backend Infrastructure [DONE]
 
-1. Create service account in GCP
-2. Add backend API routes (alongside existing direct-to-Google calls)
-3. Implement authorization middleware
-4. Test with service account credentials
+1. [x] OpenAPI spec created (`api/openapi.yaml`)
+2. [x] Go server code generated with oapi-codegen
+3. [x] API server implementation (`server/api/server.go`)
+4. [x] Authorization middleware (RequireAuth, RequireDriveAccess)
+5. [x] TypeScript client generated with openapi-typescript-codegen
+6. [ ] Create service account in GCP
+7. [ ] Test with service account credentials
 
 ### Phase 2: Frontend Migration
 
-1. Create new API client module
-2. Update stores to use backend API instead of direct Google calls
-3. Simplify OAuth to identity-only scopes
-4. Remove extended access toggle (no longer needed)
+1. [x] Create new API client module (`web/src/lib/api/backend.js`)
+2. [ ] Update stores to use backend API instead of direct Google calls
+3. [ ] Simplify OAuth to identity-only scopes
+4. [ ] Remove extended access toggle (no longer needed)
 
 ### Phase 3: Cleanup
 
-1. Remove direct Google API calls from frontend
-2. Remove Picker for spreadsheet selection (now configured via env)
-3. Update documentation
-4. Remove unused auth code
+1. [ ] Remove direct Google API calls from frontend
+2. [ ] Remove Picker for spreadsheet selection (now configured via env)
+3. [ ] Update documentation
+4. [ ] Remove unused auth code
 
 ### Rollout Strategy
 

@@ -13,14 +13,17 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/grant-tracker/server/api"
 )
 
 var (
-	clientID     string
-	clientSecret string
-	redirectURI  string
-	staticDir    string
+	clientID      string
+	clientSecret  string
+	redirectURI   string
+	staticDir     string
 	allowedOrigin string
+	apiServer     *api.Server
 )
 
 // TokenResponse represents the response from Google's token endpoint
@@ -60,6 +63,14 @@ func main() {
 		redirectURI = "http://localhost:8080/auth/callback"
 	}
 
+	// Initialize API server (service account)
+	var err error
+	apiServer, err = api.NewServer(clientID)
+	if err != nil {
+		log.Printf("Warning: API server initialization failed: %v", err)
+		log.Printf("Service account API endpoints will not be available")
+	}
+
 	// Create router
 	mux := http.NewServeMux()
 
@@ -70,8 +81,34 @@ func main() {
 	mux.HandleFunc("/auth/logout", handleLogout)
 	mux.HandleFunc("/auth/status", handleStatus)
 
-	// Config endpoint (returns client ID for picker)
-	mux.HandleFunc("/api/config", handleConfig)
+	// Register API routes if service account is available
+	if apiServer != nil && apiServer.IsConfigured() {
+		grantsFolderID := os.Getenv("GRANTS_FOLDER_ID")
+
+		// Config endpoint (public)
+		mux.HandleFunc("/api/config", apiServer.GetConfig)
+
+		// Sheets endpoints (require auth + drive access)
+		mux.HandleFunc("/api/sheets/read", api.RequireDriveAccess(grantsFolderID, apiServer.ReadSheet))
+		mux.HandleFunc("/api/sheets/append", api.RequireDriveAccess(grantsFolderID, apiServer.AppendRow))
+		mux.HandleFunc("/api/sheets/update", api.RequireDriveAccess(grantsFolderID, apiServer.UpdateRow))
+		mux.HandleFunc("/api/sheets/delete", api.RequireDriveAccess(grantsFolderID, apiServer.DeleteRow))
+		mux.HandleFunc("/api/sheets/batch-update", api.RequireDriveAccess(grantsFolderID, apiServer.BatchUpdateCells))
+
+		// Drive endpoints (require auth + drive access)
+		mux.HandleFunc("/api/drive/list", api.RequireDriveAccess(grantsFolderID, apiServer.ListFiles))
+		mux.HandleFunc("/api/drive/create-folder", api.RequireDriveAccess(grantsFolderID, apiServer.CreateFolder))
+		mux.HandleFunc("/api/drive/create-doc", api.RequireDriveAccess(grantsFolderID, apiServer.CreateDoc))
+		mux.HandleFunc("/api/drive/create-shortcut", api.RequireDriveAccess(grantsFolderID, apiServer.CreateShortcut))
+		mux.HandleFunc("/api/drive/move", api.RequireDriveAccess(grantsFolderID, apiServer.MoveFile))
+		mux.HandleFunc("/api/drive/get", api.RequireDriveAccess(grantsFolderID, apiServer.GetFile))
+
+		log.Printf("Service account API routes registered")
+	} else {
+		// Fallback config endpoint without service account
+		mux.HandleFunc("/api/config", handleConfigFallback)
+		log.Printf("Running without service account - client-side auth only")
+	}
 
 	// Static files and SPA routing
 	mux.HandleFunc("/", handleStatic)
@@ -284,11 +321,12 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleConfig returns client configuration for the frontend
-func handleConfig(w http.ResponseWriter, r *http.Request) {
+// handleConfigFallback returns client configuration when no service account is available
+func handleConfigFallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"clientId": clientID,
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"clientId":              clientID,
+		"serviceAccountEnabled": false,
 	})
 }
 
