@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -20,29 +21,31 @@ import (
 
 // Server implements the generated ServerInterface
 type Server struct {
-	clientID       string
+	clientID     string
+	rootFolderID string // Shared Drive root folder
+	credentials  []byte // Service account credentials (nil = use default)
+
+	// Discovered from root folder
 	spreadsheetID  string
 	grantsFolderID string
-	credentials    []byte // Service account credentials (nil = use default)
 
 	// Cached service clients
 	sheetsClient *sheets.Service
 	driveClient  *drive.Service
+	docsClient   *docs.Service
 	clientMu     sync.Mutex
 }
 
 // NewServer creates a new API server
 func NewServer(clientID string) (*Server, error) {
 	s := &Server{
-		clientID:       clientID,
-		spreadsheetID:  os.Getenv("SPREADSHEET_ID"),
-		grantsFolderID: os.Getenv("GRANTS_FOLDER_ID"),
+		clientID:     clientID,
+		rootFolderID: os.Getenv("ROOT_FOLDER_ID"),
 	}
 
 	log.Printf("[API] Initializing server...")
 	log.Printf("[API]   Client ID: %s", maskString(clientID))
-	log.Printf("[API]   Spreadsheet ID: %s", maskString(s.spreadsheetID))
-	log.Printf("[API]   Grants Folder ID: %s", maskString(s.grantsFolderID))
+	log.Printf("[API]   Root Folder ID: %s", maskString(s.rootFolderID))
 
 	// Load service account credentials
 	if keyJSON := os.Getenv("GOOGLE_SERVICE_ACCOUNT_KEY"); keyJSON != "" {
@@ -59,9 +62,98 @@ func NewServer(clientID string) (*Server, error) {
 		log.Printf("[API]   Service account: NOT CONFIGURED")
 	}
 
+	// Discover spreadsheet and Grants folder from root folder
+	if s.rootFolderID != "" && s.credentials != nil {
+		if err := s.discoverResources(); err != nil {
+			log.Printf("[API]   Discovery failed: %v", err)
+			// Don't fail server startup - just log the error
+		}
+	}
+
 	log.Printf("[API]   IsConfigured: %v", s.IsConfigured())
 
 	return s, nil
+}
+
+// discoverResources finds the spreadsheet and Grants folder in the root folder
+func (s *Server) discoverResources() error {
+	ctx := context.Background()
+
+	srv, err := s.driveService(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get drive service: %w", err)
+	}
+
+	// Verify root folder exists and is in a Shared Drive
+	rootFolder, err := srv.Files.Get(s.rootFolderID).
+		SupportsAllDrives(true).
+		Fields("id, name, driveId, mimeType").
+		Do()
+	if err != nil {
+		return fmt.Errorf("failed to get root folder: %w", err)
+	}
+
+	if rootFolder.DriveId == "" {
+		return fmt.Errorf("root folder must be in a Shared Drive")
+	}
+
+	log.Printf("[API]   Root folder: %s (Shared Drive: %s)", rootFolder.Name, rootFolder.DriveId)
+
+	// Find spreadsheet in root folder (Google Sheets file)
+	spreadsheetQuery := fmt.Sprintf("'%s' in parents and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false", s.rootFolderID)
+	spreadsheetResp, err := srv.Files.List().
+		Q(spreadsheetQuery).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
+		Fields("files(id, name)").
+		PageSize(10).
+		Do()
+	if err != nil {
+		return fmt.Errorf("failed to search for spreadsheet: %w", err)
+	}
+
+	if len(spreadsheetResp.Files) == 0 {
+		return fmt.Errorf("no spreadsheet found in root folder")
+	}
+
+	s.spreadsheetID = spreadsheetResp.Files[0].Id
+	log.Printf("[API]   Discovered spreadsheet: %s (%s)", spreadsheetResp.Files[0].Name, maskString(s.spreadsheetID))
+
+	// Find Grants folder in root folder
+	grantsFolderQuery := fmt.Sprintf("'%s' in parents and mimeType = 'application/vnd.google-apps.folder' and name = 'Grants' and trashed = false", s.rootFolderID)
+	grantsFolderResp, err := srv.Files.List().
+		Q(grantsFolderQuery).
+		SupportsAllDrives(true).
+		IncludeItemsFromAllDrives(true).
+		Fields("files(id, name)").
+		PageSize(1).
+		Do()
+	if err != nil {
+		return fmt.Errorf("failed to search for Grants folder: %w", err)
+	}
+
+	if len(grantsFolderResp.Files) == 0 {
+		// Create Grants folder if it doesn't exist
+		grantsFolder := &drive.File{
+			Name:     "Grants",
+			MimeType: "application/vnd.google-apps.folder",
+			Parents:  []string{s.rootFolderID},
+		}
+		created, err := srv.Files.Create(grantsFolder).
+			SupportsAllDrives(true).
+			Fields("id").
+			Do()
+		if err != nil {
+			return fmt.Errorf("failed to create Grants folder: %w", err)
+		}
+		s.grantsFolderID = created.Id
+		log.Printf("[API]   Created Grants folder: %s", maskString(s.grantsFolderID))
+	} else {
+		s.grantsFolderID = grantsFolderResp.Files[0].Id
+		log.Printf("[API]   Discovered Grants folder: %s", maskString(s.grantsFolderID))
+	}
+
+	return nil
 }
 
 // maskString masks all but the first 8 and last 4 characters
@@ -132,8 +224,33 @@ func (s *Server) driveService(ctx context.Context) (*drive.Service, error) {
 	}
 	s.driveClient = srv
 	return srv, nil
+}
 
-	return drive.NewService(ctx, opts...)
+// docsService returns an authenticated Docs API service (cached)
+func (s *Server) docsService(ctx context.Context) (*docs.Service, error) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
+	if s.docsClient != nil {
+		return s.docsClient, nil
+	}
+
+	var opts []option.ClientOption
+
+	if s.credentials != nil {
+		config, err := google.JWTConfigFromJSON(s.credentials, docs.DocumentsScope)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse service account credentials: %w", err)
+		}
+		opts = append(opts, option.WithTokenSource(config.TokenSource(ctx)))
+	}
+
+	srv, err := docs.NewService(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s.docsClient = srv
+	return srv, nil
 }
 
 // ============================================
@@ -1123,4 +1240,135 @@ func (s *Server) GetFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, fi)
+}
+
+// ============================================
+// Docs API endpoints
+// ============================================
+
+// InitializeTrackerDocRequest is the request body for initializing a tracker doc
+type InitializeTrackerDocRequest struct {
+	DocumentId string            `json:"documentId"`
+	Grant      map[string]string `json:"grant"`
+	Approvers  []string          `json:"approvers,omitempty"`
+}
+
+// InitializeTrackerDoc populates a tracker doc with grant metadata
+func (s *Server) InitializeTrackerDoc(w http.ResponseWriter, r *http.Request) {
+	var req InitializeTrackerDocRequest
+	if err := decodeBody(r, &req); err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.DocumentId == "" {
+		writeError(w, "documentId is required", http.StatusBadRequest)
+		return
+	}
+
+	srv, err := s.docsService(r.Context())
+	if err != nil {
+		log.Printf("Failed to create Docs service: %v", err)
+		writeError(w, "Failed to connect to Google Docs", http.StatusInternalServerError)
+		return
+	}
+
+	// Build the document content
+	var requests []*docs.Request
+
+	// Start with Status heading
+	content := "Status\n\n"
+
+	// Add project metadata table if grant data provided
+	if len(req.Grant) > 0 {
+		content += "Project Metadata\n"
+	}
+
+	// Insert the content at the beginning
+	requests = append(requests, &docs.Request{
+		InsertText: &docs.InsertTextRequest{
+			Location: &docs.Location{Index: 1},
+			Text:     content,
+		},
+	})
+
+	// Format "Status" as Heading 1
+	requests = append(requests, &docs.Request{
+		UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
+			Range: &docs.Range{
+				StartIndex: 1,
+				EndIndex:   8, // "Status\n"
+			},
+			ParagraphStyle: &docs.ParagraphStyle{
+				NamedStyleType: "HEADING_1",
+			},
+			Fields: "namedStyleType",
+		},
+	})
+
+	// If we have grant data, format "Project Metadata" as Heading 2
+	if len(req.Grant) > 0 {
+		metadataStart := 9 // After "Status\n\n"
+		metadataEnd := metadataStart + 17 // "Project Metadata\n"
+		requests = append(requests, &docs.Request{
+			UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
+				Range: &docs.Range{
+					StartIndex: int64(metadataStart),
+					EndIndex:   int64(metadataEnd),
+				},
+				ParagraphStyle: &docs.ParagraphStyle{
+					NamedStyleType: "HEADING_2",
+				},
+				Fields: "namedStyleType",
+			},
+		})
+
+		// Build metadata table content
+		tableRows := [][]string{
+			{"Field", "Value"},
+		}
+
+		// Add key grant fields
+		fieldOrder := []string{"ID", "Title", "Organization", "Amount", "Status", "Year"}
+		for _, field := range fieldOrder {
+			if val, ok := req.Grant[field]; ok && val != "" {
+				tableRows = append(tableRows, []string{field, val})
+			}
+		}
+
+		// Create and insert table if we have data
+		if len(tableRows) > 1 {
+			// Insert table after the heading
+			tableIndex := int64(metadataEnd)
+			requests = append(requests, &docs.Request{
+				InsertTable: &docs.InsertTableRequest{
+					Location: &docs.Location{Index: tableIndex},
+					Rows:     int64(len(tableRows)),
+					Columns:  2,
+				},
+			})
+		}
+	}
+
+	// Add Approvals section if approvers provided
+	if len(req.Approvers) > 0 {
+		// We'll add this after the initial content is inserted
+		// For now, just add a placeholder - the table structure is complex
+	}
+
+	// Execute batch update
+	_, err = srv.Documents.BatchUpdate(req.DocumentId, &docs.BatchUpdateDocumentRequest{
+		Requests: requests,
+	}).Do()
+
+	if err != nil {
+		log.Printf("Failed to initialize tracker doc: %v", err)
+		writeError(w, fmt.Sprintf("Failed to initialize document: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	userEmail := r.Header.Get("X-User-Email")
+	log.Printf("AUDIT: %s initialized tracker doc %s", userEmail, req.DocumentId)
+
+	writeJSON(w, map[string]bool{"success": true})
 }

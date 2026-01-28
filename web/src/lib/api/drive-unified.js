@@ -313,19 +313,25 @@ export async function createGrantFolderStructure(accessToken, grantsFolderId, gr
   // Initialize Tracker doc with grant metadata if grant data provided
   if (grant) {
     try {
-      const { initializeTrackerDoc } = await import('./docs.js');
-      const { readApprovers } = await import('./sheets.js');
+      if (useBackend()) {
+        // Use backend endpoint for service account mode
+        await initializeTrackerDocViaBackend(trackerDoc.id, grant);
+      } else {
+        // Use direct Docs API for client-side mode
+        const { initializeTrackerDoc } = await import('./docs.js');
+        const { readApprovers } = await import('./sheets.js');
 
-      let approvers = [];
-      if (spreadsheetId) {
-        try {
-          approvers = await readApprovers(accessToken, spreadsheetId);
-        } catch (err) {
-          console.warn('Failed to read approvers:', err);
+        let approvers = [];
+        if (spreadsheetId) {
+          try {
+            approvers = await readApprovers(accessToken, spreadsheetId);
+          } catch (err) {
+            console.warn('Failed to read approvers:', err);
+          }
         }
-      }
 
-      await initializeTrackerDoc(accessToken, trackerDoc.id, grant, approvers);
+        await initializeTrackerDoc(accessToken, trackerDoc.id, grant, approvers);
+      }
     } catch (err) {
       console.warn('Failed to initialize Tracker doc:', err);
     }
@@ -346,4 +352,36 @@ export async function createGrantFolderStructure(accessToken, grantsFolderId, gr
  */
 export function isUsingBackendApi() {
   return configStore.serviceAccountEnabled;
+}
+
+/**
+ * Initialize a tracker doc via the backend (service account mode).
+ * @param {string} documentId - Document ID
+ * @param {Object} grant - Grant data
+ * @returns {Promise<void>}
+ */
+async function initializeTrackerDocViaBackend(documentId, grant) {
+  const response = await fetch('/api/docs/initialize-tracker', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      documentId,
+      grant: {
+        ID: grant.ID || '',
+        Title: grant.Title || '',
+        Organization: grant.Organization || '',
+        Amount: grant.Amount ? String(grant.Amount) : '',
+        Status: grant.Status || '',
+        Year: grant.Year ? String(grant.Year) : '',
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
 }

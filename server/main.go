@@ -106,6 +106,9 @@ func main() {
 		mux.HandleFunc("/api/drive/move", apiServer.RequireAccess(apiServer.MoveFile))
 		mux.HandleFunc("/api/drive/get", apiServer.RequireAccess(apiServer.GetFile))
 
+		// Docs endpoints (require auth + access check via service account)
+		mux.HandleFunc("/api/docs/initialize-tracker", apiServer.RequireAccess(apiServer.InitializeTrackerDoc))
+
 		log.Printf("Service account API routes registered")
 	} else {
 		// Fallback config endpoint without service account
