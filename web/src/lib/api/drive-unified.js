@@ -18,6 +18,39 @@ function useBackend() {
 }
 
 /**
+ * Extract actual error message from an API error.
+ * The generated API client puts the static error description in error.message,
+ * but the actual server error is in error.body.error.
+ * @param {Error} error - The error to extract message from
+ * @returns {string} - The actual error message
+ */
+function extractErrorMessage(error) {
+  // Check if this is an ApiError with a body containing the actual error
+  if (error.body && typeof error.body === 'object' && error.body.error) {
+    return error.body.error;
+  }
+  // Fall back to the error message
+  return error.message || 'Unknown error';
+}
+
+/**
+ * Wrap an async function to extract better error messages from API errors.
+ * @param {Function} fn - Async function to wrap
+ * @returns {Function} - Wrapped function
+ */
+async function withBetterErrors(fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    const message = extractErrorMessage(error);
+    const betterError = new Error(message);
+    betterError.status = error.status;
+    betterError.body = error.body;
+    throw betterError;
+  }
+}
+
+/**
  * Create a folder in Google Drive.
  * @param {string} accessToken - OAuth access token
  * @param {string} name - Folder name
@@ -26,14 +59,16 @@ function useBackend() {
  */
 export async function createFolder(accessToken, name, parentId) {
   if (useBackend()) {
-    const response = await DriveService.createFolder({
-      requestBody: { name, parentId },
+    return withBetterErrors(async () => {
+      const response = await DriveService.createFolder({
+        requestBody: { name, parentId },
+      });
+      return {
+        id: response.id,
+        name: name,
+        url: response.url,
+      };
     });
-    return {
-      id: response.id,
-      name: name,
-      url: response.url,
-    };
   }
 
   return directDrive.createFolder(accessToken, name, parentId);
@@ -48,18 +83,20 @@ export async function createFolder(accessToken, name, parentId) {
  */
 export async function listFiles(accessToken, folderId, options = {}) {
   if (useBackend()) {
-    let query = null;
-    if (options.foldersOnly) {
-      query = `mimeType = 'application/vnd.google-apps.folder'`;
-    } else if (options.mimeType) {
-      query = `mimeType = '${options.mimeType}'`;
-    }
+    return withBetterErrors(async () => {
+      let query = null;
+      if (options.foldersOnly) {
+        query = `mimeType = 'application/vnd.google-apps.folder'`;
+      } else if (options.mimeType) {
+        query = `mimeType = '${options.mimeType}'`;
+      }
 
-    const response = await DriveService.listFiles({
-      requestBody: { folderId, query },
+      const response = await DriveService.listFiles({
+        requestBody: { folderId, query },
+      });
+
+      return response.files || [];
     });
-
-    return response.files || [];
   }
 
   return directDrive.listFiles(accessToken, folderId, options);
@@ -74,12 +111,14 @@ export async function listFiles(accessToken, folderId, options = {}) {
  */
 export async function findFolder(accessToken, parentId, name) {
   if (useBackend()) {
-    const query = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder'`;
-    const response = await DriveService.listFiles({
-      requestBody: { folderId: parentId, query },
-    });
+    return withBetterErrors(async () => {
+      const query = `name = '${name}' and mimeType = 'application/vnd.google-apps.folder'`;
+      const response = await DriveService.listFiles({
+        requestBody: { folderId: parentId, query },
+      });
 
-    return response.files?.[0] || null;
+      return response.files?.[0] || null;
+    });
   }
 
   return directDrive.findFolder(accessToken, parentId, name);
@@ -117,18 +156,20 @@ export async function findOrCreateFolder(accessToken, parentId, name) {
  */
 export async function createDoc(accessToken, name, parentId) {
   if (useBackend()) {
-    const response = await DriveService.createDoc({
-      requestBody: {
-        name,
-        mimeType: 'application/vnd.google-apps.document',
-        parentId,
-      },
+    return withBetterErrors(async () => {
+      const response = await DriveService.createDoc({
+        requestBody: {
+          name,
+          mimeType: 'application/vnd.google-apps.document',
+          parentId,
+        },
+      });
+      return {
+        id: response.id,
+        name: name,
+        url: response.url,
+      };
     });
-    return {
-      id: response.id,
-      name: name,
-      url: response.url,
-    };
   }
 
   return directDrive.createDoc(accessToken, name, parentId);
@@ -142,8 +183,10 @@ export async function createDoc(accessToken, name, parentId) {
  */
 export async function getFile(accessToken, fileId) {
   if (useBackend()) {
-    return DriveService.getFile({
-      requestBody: { fileId },
+    return withBetterErrors(async () => {
+      return DriveService.getFile({
+        requestBody: { fileId },
+      });
     });
   }
 
@@ -174,13 +217,15 @@ export async function folderExists(accessToken, folderId) {
  */
 export async function createShortcut(accessToken, fileId, targetFolderId) {
   if (useBackend()) {
-    const response = await DriveService.createShortcut({
-      requestBody: {
-        targetId: fileId,
-        parentId: targetFolderId,
-      },
+    return withBetterErrors(async () => {
+      const response = await DriveService.createShortcut({
+        requestBody: {
+          targetId: fileId,
+          parentId: targetFolderId,
+        },
+      });
+      return { id: response.id };
     });
-    return { id: response.id };
   }
 
   return directDrive.createShortcut(accessToken, fileId, targetFolderId);
@@ -195,13 +240,15 @@ export async function createShortcut(accessToken, fileId, targetFolderId) {
  */
 export async function moveFileToFolder(accessToken, fileId, targetFolderId) {
   if (useBackend()) {
-    await DriveService.moveFile({
-      requestBody: {
-        fileId,
-        newParentId: targetFolderId,
-      },
+    return withBetterErrors(async () => {
+      await DriveService.moveFile({
+        requestBody: {
+          fileId,
+          newParentId: targetFolderId,
+        },
+      });
+      return { id: fileId };
     });
-    return { id: fileId };
   }
 
   return directDrive.moveFileToFolder(accessToken, fileId, targetFolderId);
