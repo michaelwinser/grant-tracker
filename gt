@@ -339,28 +339,30 @@ gcp_service_account() {
     # Create the key
     echo ""
     echo "Creating service account key..."
-    mkdir -p "$(pwd)/.secrets"
 
     # Remove old key if it exists
     rm -f "$KEY_FILE"
 
+    # Create directory and key file inside container to avoid permission issues
     docker run --rm \
         -v "$(pwd)":/workspace \
         -v "$(pwd)/.gcloud":/root/.config/gcloud \
         -w /workspace \
         "$DEV_IMAGE_NAME" \
-        gcloud iam service-accounts keys create .secrets/service-account-key.json \
-            --iam-account="$SA_EMAIL" \
-            --project="$PROJECT_ID"
+        sh -c "mkdir -p .secrets && gcloud iam service-accounts keys create .secrets/service-account-key.json --iam-account='$SA_EMAIL' --project='$PROJECT_ID' && chmod 644 .secrets/service-account-key.json"
 
     if [ $? -ne 0 ]; then
         echo "Error: Failed to create service account key"
         exit 1
     fi
 
-    # Verify the key was created
+    # Verify the key was created (give it a moment for filesystem sync)
+    sleep 1
     if [ ! -f "$KEY_FILE" ]; then
-        echo "Error: Key file was not created"
+        # Try to see what's in the directory
+        echo "Warning: Key file not found at expected location."
+        echo "Checking .secrets directory..."
+        ls -la "$(pwd)/.secrets/" 2>/dev/null || echo "Directory does not exist"
         exit 1
     fi
 
