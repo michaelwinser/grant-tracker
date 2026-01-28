@@ -25,8 +25,29 @@ const AUTH_MODE_KEY = 'gt_auth_mode';
 const EXTENDED_SCOPE_KEY = 'gt_extended_scope';
 
 // OAuth scopes
+// Identity-only scopes for service account mode (backend handles all API calls)
+const IDENTITY_SCOPES = 'openid email profile';
+// Full scopes for client-side API access (no service account)
 const BASE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file';
 const EXTENDED_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+
+/**
+ * Get the appropriate OAuth scopes based on configuration.
+ * In service account mode, only identity scopes are needed.
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.extendedScope] - Request extended file access (client mode only)
+ * @returns {string} - Space-separated scope string
+ */
+function getScopes(options = {}) {
+  // Service account mode: only need identity for user verification
+  if (configStore.serviceAccountEnabled) {
+    return IDENTITY_SCOPES;
+  }
+
+  // Client mode: need drive.file scope, optionally drive.readonly
+  const useExtended = options.extendedScope || hasExtendedScope();
+  return useExtended ? EXTENDED_SCOPES : BASE_SCOPES;
+}
 
 /**
  * Get the user's preferred auth mode from localStorage.
@@ -279,9 +300,7 @@ function loadGoogleSignIn() {
 export async function signInClient(clientId, options = {}) {
   await loadGoogleSignIn();
 
-  // Use extended scope if requested or if previously enabled
-  const useExtended = options.extendedScope || hasExtendedScope();
-  const scope = useExtended ? EXTENDED_SCOPES : BASE_SCOPES;
+  const scope = getScopes(options);
 
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
@@ -348,10 +367,13 @@ export async function revokeExtendedAccess(clientId) {
 
   await loadGoogleSignIn();
 
+  // Use base scopes (or identity-only in service account mode)
+  const scope = getScopes({ extendedScope: false });
+
   return new Promise((resolve, reject) => {
     const client = window.google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: BASE_SCOPES,
+      scope,
       callback: async (tokenResponse) => {
         if (tokenResponse.error) {
           reject(new Error(tokenResponse.error));
