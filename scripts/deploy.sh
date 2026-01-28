@@ -97,6 +97,23 @@ gcloud builds submit \
     --tag "$IMAGE_NAME" \
     --quiet
 
+# Build env vars string for Cloud Run
+# Use ^@^ as separator since service account key JSON contains commas
+ENV_VARS="GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
+ENV_VARS="${ENV_VARS}@GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
+ENV_VARS="${ENV_VARS}@REDIRECT_URI=${REDIRECT_URI}"
+
+# Add service account and data config if set
+if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+    ENV_VARS="${ENV_VARS}@GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}"
+fi
+if [ -n "$SPREADSHEET_ID" ]; then
+    ENV_VARS="${ENV_VARS}@SPREADSHEET_ID=${SPREADSHEET_ID}"
+fi
+if [ -n "$GRANTS_FOLDER_ID" ]; then
+    ENV_VARS="${ENV_VARS}@GRANTS_FOLDER_ID=${GRANTS_FOLDER_ID}"
+fi
+
 # Deploy to Cloud Run with all environment variables set at once
 echo "Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE_NAME" \
@@ -104,7 +121,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --region "$GCP_REGION" \
     --platform managed \
     --allow-unauthenticated \
-    --set-env-vars "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},REDIRECT_URI=${REDIRECT_URI}" \
+    --set-env-vars "^@^${ENV_VARS}" \
     --quiet
 
 # Get the service URL (for display only - we use the configured REDIRECT_URI)
