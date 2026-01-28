@@ -315,6 +315,7 @@ func (s *Server) verifyDriveAccessWithServiceAccount(ctx context.Context, userEm
 
 	// List permissions on the folder
 	perms, err := srv.Permissions.List(folderId).
+		SupportsAllDrives(true).
 		Fields("permissions(emailAddress,role,type)").
 		Do()
 	if err != nil {
