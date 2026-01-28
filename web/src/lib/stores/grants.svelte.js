@@ -139,18 +139,24 @@ async function load() {
       ? configStore.spreadsheetId
       : spreadsheetStore.spreadsheetId;
 
+    console.log('[Grants Store] Loading status config...');
     statusConfig = await readStatusConfig(
       userStore.accessToken,
       spreadsheetId
     );
+    console.log('[Grants Store] Status config loaded:', statusConfig);
 
     // Load grants
+    console.log('[Grants Store] Loading grants...');
     const rows = await client.readSheet('Grants');
+    console.log('[Grants Store] Raw rows:', rows.length);
     grants = rows
       .map(normalizeGrant)
       .filter((row) => row.ID); // Filter out empty rows
+    console.log('[Grants Store] Filtered grants:', grants.length);
     lastLoaded = new Date();
   } catch (err) {
+    console.error('[Grants Store] Error:', err);
     error = err.message;
     throw err;
   } finally {
