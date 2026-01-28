@@ -160,7 +160,7 @@
     try {
       const found = await findFolder(
         userStore.accessToken,
-        folderStore.grantsFolderId,
+        folderStore.effectiveGrantsFolderId,
         currentGrant.ID
       );
 
@@ -273,7 +273,7 @@
     try {
       const folderResult = await createGrantFolderStructure(
         userStore.accessToken,
-        folderStore.grantsFolderId,
+        folderStore.effectiveGrantsFolderId,
         currentGrant.ID,
         currentGrant,
         spreadsheetStore.spreadsheetId

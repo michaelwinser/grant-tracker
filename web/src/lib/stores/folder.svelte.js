@@ -3,6 +3,8 @@
  * Manages the selected Google Drive root folder for Grant Tracker.
  */
 
+import { configStore } from './config.svelte.js';
+
 const STORAGE_KEY = 'grant-tracker-folder';
 
 // Reactive state
@@ -15,7 +17,10 @@ let error = $state(null);
 
 // Derived state
 const hasFolder = $derived(folderId !== null);
-const hasGrantsFolder = $derived(grantsFolderId !== null);
+// Check both localStorage and server config for grants folder
+const hasGrantsFolder = $derived(grantsFolderId !== null || configStore.grantsFolderId !== null);
+// Effective grants folder ID: prefer localStorage, fall back to server config
+const effectiveGrantsFolderId = $derived(grantsFolderId || configStore.grantsFolderId);
 
 /**
  * Initialize the store from localStorage.
@@ -147,6 +152,9 @@ export const folderStore = {
   },
   get hasGrantsFolder() {
     return hasGrantsFolder;
+  },
+  get effectiveGrantsFolderId() {
+    return effectiveGrantsFolderId;
   },
 
   // Actions
