@@ -12,8 +12,11 @@
   let spreadsheetSetupAttempted = $state(false);
 
   // Handle case where folder exists from localStorage but spreadsheet doesn't
+  // Only run in client-side auth mode (service account mode has spreadsheet pre-configured)
   $effect(() => {
     if (
+      configStore.loaded &&
+      !configStore.serviceAccountEnabled &&
       folderStore.hasFolder &&
       folderStore.hasGrantsFolder &&
       !spreadsheetStore.hasSpreadsheet &&

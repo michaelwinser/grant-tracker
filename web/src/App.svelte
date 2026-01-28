@@ -182,7 +182,7 @@
     <NavBar />
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {#if !configStore.serviceAccountEnabled && (!folderStore.hasFolder || !spreadsheetStore.hasSpreadsheet || showInitializePrompt)}
+      {#if configStore.loaded && !configStore.serviceAccountEnabled && (!folderStore.hasFolder || !spreadsheetStore.hasSpreadsheet || showInitializePrompt)}
         <!-- Folder and spreadsheet setup (only needed in client-side auth mode) -->
         <FolderPicker />
       {:else if !configStore.serviceAccountEnabled && (spreadsheetStore.isLoading || isValidatingStored)}
