@@ -33,10 +33,11 @@
     folderStore.initialize();
   });
 
-  // Validate stored spreadsheet when user authenticates
+  // Validate stored spreadsheet when user authenticates (client-side auth mode only)
   $effect(() => {
     const currentId = spreadsheetStore.spreadsheetId;
     if (
+      !configStore.serviceAccountEnabled &&
       userStore.isAuthenticated &&
       spreadsheetStore.hasSpreadsheet &&
       !spreadsheetStore.isValidated &&
@@ -47,15 +48,20 @@
     }
   });
 
-  // Load data when spreadsheet is validated
+  // Load data when ready
+  // - Service account mode: load when authenticated (spreadsheet comes from server config)
+  // - Client-side mode: load when spreadsheet is validated
   $effect(() => {
-    const currentId = spreadsheetStore.spreadsheetId;
-    if (
-      userStore.isAuthenticated &&
-      spreadsheetStore.isValidated &&
-      !dataStore.isLoading &&
-      dataLoadedFor !== currentId
-    ) {
+    const isServiceAccountMode = configStore.serviceAccountEnabled;
+    const spreadsheetId = isServiceAccountMode ? configStore.spreadsheetId : spreadsheetStore.spreadsheetId;
+
+    if (!userStore.isAuthenticated || !configStore.loaded) return;
+    if (dataStore.isLoading) return;
+    if (dataLoadedFor === spreadsheetId) return;
+
+    // In service account mode, we can load immediately
+    // In client-side mode, we need the spreadsheet to be validated
+    if (isServiceAccountMode || spreadsheetStore.isValidated) {
       loadData();
     }
   });
@@ -173,11 +179,11 @@
     <NavBar />
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {#if !folderStore.hasFolder || !spreadsheetStore.hasSpreadsheet || showInitializePrompt}
-        <!-- Folder and spreadsheet setup -->
+      {#if !configStore.serviceAccountEnabled && (!folderStore.hasFolder || !spreadsheetStore.hasSpreadsheet || showInitializePrompt)}
+        <!-- Folder and spreadsheet setup (only needed in client-side auth mode) -->
         <FolderPicker />
-      {:else if spreadsheetStore.isLoading || isValidatingStored}
-        <!-- Validating stored spreadsheet -->
+      {:else if !configStore.serviceAccountEnabled && (spreadsheetStore.isLoading || isValidatingStored)}
+        <!-- Validating stored spreadsheet (client-side auth mode) -->
         <div class="text-center py-12">
           <svg class="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -185,7 +191,7 @@
           </svg>
           <p class="text-gray-600">Validating spreadsheet...</p>
         </div>
-      {:else if spreadsheetStore.isValidated && dataStore.isLoading}
+      {:else if dataStore.isLoading}
         <!-- Loading data -->
         <div class="text-center py-12">
           <svg class="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -194,7 +200,7 @@
           </svg>
           <p class="text-gray-600">Loading data...</p>
         </div>
-      {:else if spreadsheetStore.isValidated && dataStore.anyError}
+      {:else if dataStore.anyError}
         <!-- Data loading error -->
         <div class="max-w-lg mx-auto">
           <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
@@ -211,7 +217,7 @@
             </button>
           </div>
         </div>
-      {:else if spreadsheetStore.isValidated && dataStore.isLoaded}
+      {:else if dataStore.isLoaded}
         <!-- Main app content with routing -->
         {#if router.route === 'grants'}
           <GrantList />
@@ -226,8 +232,8 @@
         {:else}
           <Dashboard />
         {/if}
-      {:else}
-        <!-- Spreadsheet error state -->
+      {:else if !configStore.serviceAccountEnabled}
+        <!-- Spreadsheet error state (client-side auth mode only) -->
         <div class="max-w-lg mx-auto">
           <div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
             <svg class="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -242,6 +248,15 @@
               Select Different Spreadsheet
             </button>
           </div>
+        </div>
+      {:else}
+        <!-- Waiting for config to load -->
+        <div class="text-center py-12">
+          <svg class="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p class="text-gray-600">Loading...</p>
         </div>
       {/if}
     </main>
