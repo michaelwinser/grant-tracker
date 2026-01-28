@@ -365,9 +365,9 @@
             <h2 class="text-lg font-semibold text-gray-900">{yearGroup.year}</h2>
           </div>
 
-          {#each yearGroup.statuses as statusGroup (statusGroup.status)}
+          {#each yearGroup.statuses as statusGroup, index (statusGroup.status)}
             <!-- Status Subheader -->
-            <div class="px-6 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2">
+            <div class="px-6 py-2 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2 {index > 0 ? 'border-t border-t-gray-200' : ''}">
               <StatusBadge status={statusGroup.status} />
               <span class="text-xs text-gray-500">({statusGroup.grants.length})</span>
             </div>
