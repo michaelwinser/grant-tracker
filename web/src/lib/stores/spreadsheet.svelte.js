@@ -3,6 +3,8 @@
  * Manages the selected Google Spreadsheet ID and metadata.
  */
 
+import { configStore } from './config.svelte.js';
+
 const STORAGE_KEY = 'grant-tracker-spreadsheet';
 
 // Reactive state
@@ -15,6 +17,10 @@ let isValidated = $state(false);
 
 // Derived state
 const hasSpreadsheet = $derived(spreadsheetId !== null);
+// Check both localStorage and server config for spreadsheet
+const hasEffectiveSpreadsheet = $derived(spreadsheetId !== null || configStore.spreadsheetId !== null);
+// Effective spreadsheet ID: prefer localStorage, fall back to server config
+const effectiveSpreadsheetId = $derived(spreadsheetId || configStore.spreadsheetId);
 
 /**
  * Initialize the store from localStorage.
@@ -132,6 +138,12 @@ export const spreadsheetStore = {
   },
   get hasSpreadsheet() {
     return hasSpreadsheet;
+  },
+  get hasEffectiveSpreadsheet() {
+    return hasEffectiveSpreadsheet;
+  },
+  get effectiveSpreadsheetId() {
+    return effectiveSpreadsheetId;
   },
   get isValidated() {
     return isValidated;

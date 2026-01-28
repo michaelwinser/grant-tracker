@@ -276,7 +276,7 @@
         folderStore.effectiveGrantsFolderId,
         currentGrant.ID,
         currentGrant,
-        spreadsheetStore.spreadsheetId
+        spreadsheetStore.effectiveSpreadsheetId
       );
 
       // Update the grant with folder/doc URLs
@@ -302,9 +302,9 @@
     try {
       // Read approvers to pass to sync (for recreating deleted Approvals section)
       let approvers = [];
-      if (spreadsheetStore.spreadsheetId) {
+      if (spreadsheetStore.effectiveSpreadsheetId) {
         try {
-          approvers = await readApprovers(userStore.accessToken, spreadsheetStore.spreadsheetId);
+          approvers = await readApprovers(userStore.accessToken, spreadsheetStore.effectiveSpreadsheetId);
         } catch (err) {
           console.warn('Failed to read approvers for sync:', err);
         }

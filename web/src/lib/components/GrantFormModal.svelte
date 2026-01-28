@@ -118,10 +118,10 @@
           try {
             const folderResult = await createGrantFolderStructure(
               userStore.accessToken,
-              folderStore.grantsFolderId,
+              folderStore.effectiveGrantsFolderId,
               grantData.ID,
               grantData,
-              spreadsheetStore.spreadsheetId
+              spreadsheetStore.effectiveSpreadsheetId
             );
 
             // Update the grant with folder/doc URLs
