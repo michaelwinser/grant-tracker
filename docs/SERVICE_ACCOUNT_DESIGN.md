@@ -337,12 +337,17 @@ The existing StatusHistory sheet pattern should continue to work, but the "Chang
 6. [ ] Create service account in GCP
 7. [ ] Test with service account credentials
 
-### Phase 2: Frontend Migration
+### Phase 2: Frontend Migration [IN PROGRESS]
 
 1. [x] Create new API client module (`web/src/lib/api/backend.js`)
-2. [ ] Update stores to use backend API instead of direct Google calls
-3. [ ] Simplify OAuth to identity-only scopes
-4. [ ] Remove extended access toggle (no longer needed)
+2. [x] Create unified API clients (`sheets-unified.js`, `drive-unified.js`)
+3. [x] Update config store to track `serviceAccountEnabled`, `spreadsheetId`, `grantsFolderId`
+4. [x] Update grants store to use unified client
+5. [x] Update actionItems store to use unified client
+6. [ ] Update remaining stores (reports, artifacts, statusHistory, etc.)
+7. [ ] Update components using Drive API directly
+8. [ ] Simplify OAuth to identity-only scopes
+9. [ ] Remove extended access toggle (no longer needed)
 
 ### Phase 3: Cleanup
 
