@@ -60,8 +60,13 @@ func main() {
 
 	// Default redirect URI for local development
 	if redirectURI == "" {
-		redirectURI = "http://localhost:8080/auth/callback"
+		if publicURL := os.Getenv("PUBLIC_URL"); publicURL != "" {
+			redirectURI = publicURL + "/auth/callback"
+		} else {
+			redirectURI = "http://localhost:8080/auth/callback"
+		}
 	}
+	log.Printf("Using redirect URI: %s", redirectURI)
 
 	// Initialize API server (service account)
 	var err error
