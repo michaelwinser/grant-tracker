@@ -215,16 +215,22 @@ gcp() {
             shift
             gcp_domain "$@"
             ;;
+        service-account)
+            shift
+            gcp_service_account "$@"
+            ;;
         "")
             echo "Usage: ./gt gcp <subcommand>"
             echo ""
             echo "Subcommands:"
             echo "  auth                    Authenticate with Google Cloud"
+            echo "  service-account         Create service account and download key"
             echo "  deploy <env>            Deploy to Cloud Run (staging|prod)"
             echo "  domain <env> <domain>   Map a custom domain to environment"
             echo ""
             echo "Examples:"
             echo "  ./gt gcp auth"
+            echo "  ./gt gcp service-account"
             echo "  ./gt gcp deploy staging"
             echo "  ./gt gcp deploy prod"
             echo "  ./gt gcp domain staging grants-staging.example.com"
@@ -253,6 +259,146 @@ gcp_auth() {
         -w /workspace \
         "$DEV_IMAGE_NAME" \
         gcloud auth login --no-launch-browser
+}
+
+gcp_service_account() {
+    if [ ! -t 0 ]; then
+        echo "This command requires an interactive terminal."
+        echo "Please run: ./gt gcp service-account"
+        exit 1
+    fi
+
+    # Check if dev image exists
+    if ! docker image inspect "$DEV_IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Dev image not found. Building first..."
+        dev_build
+    fi
+
+    mkdir -p "$(pwd)/.gcloud"
+
+    local SA_NAME="grant-tracker-app"
+    local SA_DISPLAY_NAME="Grant Tracker App"
+    local KEY_FILE="$(pwd)/.secrets/service-account-key.json"
+
+    echo "=== Service Account Setup ==="
+    echo ""
+
+    # Get project ID
+    echo "Fetching current GCP project..."
+    local PROJECT_ID
+    PROJECT_ID=$(docker run --rm \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        "$DEV_IMAGE_NAME" \
+        gcloud config get-value project 2>/dev/null)
+
+    if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
+        echo "No project set. Please enter your GCP project ID:"
+        read -r PROJECT_ID
+        if [ -z "$PROJECT_ID" ]; then
+            echo "Error: Project ID is required"
+            exit 1
+        fi
+    fi
+
+    echo "Using project: $PROJECT_ID"
+    echo ""
+
+    local SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+    # Check if service account already exists
+    echo "Checking for existing service account..."
+    if docker run --rm \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        "$DEV_IMAGE_NAME" \
+        gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
+        echo "Service account already exists: $SA_EMAIL"
+        echo ""
+        read -p "Create a new key for the existing account? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+    else
+        # Create the service account
+        echo "Creating service account: $SA_NAME"
+        docker run --rm -it \
+            -v "$(pwd)/.gcloud":/root/.config/gcloud \
+            "$DEV_IMAGE_NAME" \
+            gcloud iam service-accounts create "$SA_NAME" \
+                --display-name="$SA_DISPLAY_NAME" \
+                --project="$PROJECT_ID"
+
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to create service account"
+            exit 1
+        fi
+        echo "Created: $SA_EMAIL"
+    fi
+
+    # Create the key
+    echo ""
+    echo "Creating service account key..."
+    mkdir -p "$(pwd)/.secrets"
+
+    # Remove old key if it exists
+    rm -f "$KEY_FILE"
+
+    docker run --rm \
+        -v "$(pwd)":/workspace \
+        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -w /workspace \
+        "$DEV_IMAGE_NAME" \
+        gcloud iam service-accounts keys create .secrets/service-account-key.json \
+            --iam-account="$SA_EMAIL" \
+            --project="$PROJECT_ID"
+
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to create service account key"
+        exit 1
+    fi
+
+    # Verify the key was created
+    if [ ! -f "$KEY_FILE" ]; then
+        echo "Error: Key file was not created"
+        exit 1
+    fi
+
+    echo ""
+    echo "=== Service Account Created ==="
+    echo ""
+    echo "Service account email:"
+    echo "  $SA_EMAIL"
+    echo ""
+    echo "Key file saved to:"
+    echo "  .secrets/service-account-key.json"
+    echo ""
+    echo "=== Next Steps ==="
+    echo ""
+    echo "1. Share your Google Sheets spreadsheet with the service account:"
+    echo "   - Open your spreadsheet"
+    echo "   - Click Share"
+    echo "   - Add: $SA_EMAIL"
+    echo "   - Give Editor access"
+    echo ""
+    echo "2. Share your Grants folder with the service account:"
+    echo "   - Open the folder in Google Drive"
+    echo "   - Click Share"
+    echo "   - Add: $SA_EMAIL"
+    echo "   - Give Editor access"
+    echo ""
+    echo "3. Add the key to your environment file (scripts/envs/local.env):"
+    echo ""
+    echo "   # Option A: Reference the key file"
+    echo "   GOOGLE_APPLICATION_CREDENTIALS=/workspace/.secrets/service-account-key.json"
+    echo ""
+    echo "   # Option B: Inline the key (for Cloud Run)"
+    echo "   GOOGLE_SERVICE_ACCOUNT_KEY='\$(cat .secrets/service-account-key.json | tr -d '\\n')'"
+    echo ""
+    echo "=== Security Reminder ==="
+    echo ""
+    echo "The .secrets/ directory is in .gitignore."
+    echo "NEVER commit service account keys to git."
 }
 
 gcp_run() {

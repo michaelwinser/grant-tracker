@@ -40,3 +40,4 @@ scripts/envs/prod.env
 # GCP credentials (local gcloud config)
 .gcloud/
 keys/
+.secrets/
