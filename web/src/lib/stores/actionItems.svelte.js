@@ -3,9 +3,10 @@
  * Manages action item data with CRUD operations and derived views.
  */
 
-import { createSheetsClient } from '../api/sheetsClient.js';
+import { createUnifiedSheetsClient, isUsingBackendApi } from '../api/sheets-unified.js';
 import { userStore } from './user.svelte.js';
 import { spreadsheetStore } from './spreadsheet.svelte.js';
+import { configStore } from './config.svelte.js';
 import {
   normalizeRow,
   nowTimestamp,
@@ -67,13 +68,23 @@ const itemsByGrant = $derived.by(() => {
 
 /**
  * Get a sheets client instance.
+ * Uses backend API when service account is enabled, otherwise direct Google API.
  * @returns {Object}
  */
 function getClient() {
+  // When using backend API, we don't need spreadsheetId from user selection
+  if (isUsingBackendApi()) {
+    if (!userStore.accessToken) {
+      throw new Error('Not authenticated');
+    }
+    return createUnifiedSheetsClient(userStore.accessToken, configStore.spreadsheetId);
+  }
+
+  // Direct API mode - need user-selected spreadsheet
   if (!userStore.accessToken || !spreadsheetStore.spreadsheetId) {
     throw new Error('Not authenticated or no spreadsheet selected');
   }
-  return createSheetsClient(userStore.accessToken, spreadsheetStore.spreadsheetId);
+  return createUnifiedSheetsClient(userStore.accessToken, spreadsheetStore.spreadsheetId);
 }
 
 /**
@@ -81,8 +92,16 @@ function getClient() {
  * @returns {Promise<void>}
  */
 async function ensureActionItemsSheetExists() {
-  if (!userStore.accessToken || !spreadsheetStore.spreadsheetId) {
-    throw new Error('Not authenticated or no spreadsheet selected');
+  if (!userStore.accessToken) {
+    throw new Error('Not authenticated');
+  }
+
+  const spreadsheetId = isUsingBackendApi()
+    ? configStore.spreadsheetId
+    : spreadsheetStore.spreadsheetId;
+
+  if (!spreadsheetId) {
+    throw new Error('No spreadsheet selected');
   }
 
   // Try to read the ActionItems sheet to check if it exists
@@ -96,7 +115,7 @@ async function ensureActionItemsSheetExists() {
       console.log('ActionItems sheet not found, creating it...');
       await initializeMissingSheets(
         userStore.accessToken,
-        spreadsheetStore.spreadsheetId,
+        spreadsheetId,
         ['ActionItems']
       );
     } else {

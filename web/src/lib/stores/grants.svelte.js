@@ -3,9 +3,10 @@
  * Manages grant data with CRUD operations and derived views.
  */
 
-import { createSheetsClient } from '../api/sheetsClient.js';
+import { createUnifiedSheetsClient, isUsingBackendApi } from '../api/sheets-unified.js';
 import { userStore } from './user.svelte.js';
 import { spreadsheetStore } from './spreadsheet.svelte.js';
+import { configStore } from './config.svelte.js';
 import { readStatusConfig, DEFAULT_STATUS_CONFIG } from '../api/sheets.js';
 
 /**
@@ -84,13 +85,23 @@ const grantCount = $derived(grants.length);
 
 /**
  * Get a sheets client instance.
+ * Uses backend API when service account is enabled, otherwise direct Google API.
  * @returns {Object}
  */
 function getClient() {
+  // When using backend API, we don't need spreadsheetId from user selection
+  if (isUsingBackendApi()) {
+    if (!userStore.accessToken) {
+      throw new Error('Not authenticated');
+    }
+    return createUnifiedSheetsClient(userStore.accessToken, configStore.spreadsheetId);
+  }
+
+  // Direct API mode - need user-selected spreadsheet
   if (!userStore.accessToken || !spreadsheetStore.spreadsheetId) {
     throw new Error('Not authenticated or no spreadsheet selected');
   }
-  return createSheetsClient(userStore.accessToken, spreadsheetStore.spreadsheetId);
+  return createUnifiedSheetsClient(userStore.accessToken, spreadsheetStore.spreadsheetId);
 }
 
 /**
@@ -123,9 +134,14 @@ async function load() {
     const client = getClient();
 
     // Load status config (includes sortOrder, includeInBudget, hideByDefault)
+    // Use spreadsheet ID from config store for backend mode, otherwise from spreadsheet store
+    const spreadsheetId = isUsingBackendApi()
+      ? configStore.spreadsheetId
+      : spreadsheetStore.spreadsheetId;
+
     statusConfig = await readStatusConfig(
       userStore.accessToken,
-      spreadsheetStore.spreadsheetId
+      spreadsheetId
     );
 
     // Load grants

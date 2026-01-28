@@ -10,6 +10,12 @@ let config = $state({
   // True if server-side auth endpoints are available (Cloud Run)
   // False for static hosting (GitHub Pages)
   serverAuthAvailable: false,
+  // True if service account API is available (for consistent file access)
+  serviceAccountEnabled: false,
+  // Spreadsheet ID (only set when service account is enabled)
+  spreadsheetId: null,
+  // Grants folder ID (only set when service account is enabled)
+  grantsFolderId: null,
 });
 
 let loadPromise = null;
@@ -35,8 +41,14 @@ export async function loadConfig() {
         const data = await response.json();
         config.clientId = data.clientId;
         config.serverAuthAvailable = true;
+        config.serviceAccountEnabled = data.serviceAccountEnabled || false;
+        config.spreadsheetId = data.spreadsheetId || null;
+        config.grantsFolderId = data.grantsFolderId || null;
         config.loaded = true;
-        console.log('Config loaded from server (server-side auth available)');
+        console.log(
+          'Config loaded from server',
+          config.serviceAccountEnabled ? '(service account enabled)' : '(client-side auth)'
+        );
         return config;
       }
     } catch (err) {
@@ -82,5 +94,14 @@ export const configStore = {
   },
   get serverAuthAvailable() {
     return config.serverAuthAvailable;
+  },
+  get serviceAccountEnabled() {
+    return config.serviceAccountEnabled;
+  },
+  get spreadsheetId() {
+    return config.spreadsheetId;
+  },
+  get grantsFolderId() {
+    return config.grantsFolderId;
   },
 };
