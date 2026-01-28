@@ -95,7 +95,10 @@
   }
 
   async function loadData() {
-    const spreadsheetId = spreadsheetStore.spreadsheetId;
+    // Use the same spreadsheet ID source as the effect that triggers this
+    const spreadsheetId = configStore.serviceAccountEnabled
+      ? configStore.spreadsheetId
+      : spreadsheetStore.spreadsheetId;
     dataLoadedFor = spreadsheetId;
 
     try {
