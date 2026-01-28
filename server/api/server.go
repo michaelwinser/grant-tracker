@@ -24,6 +24,11 @@ type Server struct {
 	spreadsheetID  string
 	grantsFolderID string
 	credentials    []byte // Service account credentials (nil = use default)
+
+	// Cached service clients
+	sheetsClient *sheets.Service
+	driveClient  *drive.Service
+	clientMu     sync.Mutex
 }
 
 // NewServer creates a new API server
@@ -75,8 +80,15 @@ func (s *Server) IsConfigured() bool {
 	return s.credentials != nil || os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") != ""
 }
 
-// sheetsService returns an authenticated Sheets API service
+// sheetsService returns an authenticated Sheets API service (cached)
 func (s *Server) sheetsService(ctx context.Context) (*sheets.Service, error) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
+	if s.sheetsClient != nil {
+		return s.sheetsClient, nil
+	}
+
 	var opts []option.ClientOption
 
 	if s.credentials != nil {
@@ -87,11 +99,23 @@ func (s *Server) sheetsService(ctx context.Context) (*sheets.Service, error) {
 		opts = append(opts, option.WithTokenSource(config.TokenSource(ctx)))
 	}
 
-	return sheets.NewService(ctx, opts...)
+	srv, err := sheets.NewService(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s.sheetsClient = srv
+	return srv, nil
 }
 
-// driveService returns an authenticated Drive API service
+// driveService returns an authenticated Drive API service (cached)
 func (s *Server) driveService(ctx context.Context) (*drive.Service, error) {
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+
+	if s.driveClient != nil {
+		return s.driveClient, nil
+	}
+
 	var opts []option.ClientOption
 
 	if s.credentials != nil {
@@ -101,6 +125,13 @@ func (s *Server) driveService(ctx context.Context) (*drive.Service, error) {
 		}
 		opts = append(opts, option.WithTokenSource(config.TokenSource(ctx)))
 	}
+
+	srv, err := drive.NewService(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s.driveClient = srv
+	return srv, nil
 
 	return drive.NewService(ctx, opts...)
 }
@@ -317,6 +348,8 @@ func (s *Server) ReadSheet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "Sheet name is required", http.StatusBadRequest)
 		return
 	}
+
+	log.Printf("[API] ReadSheet: %s", req.Sheet)
 
 	rangeStr := req.Sheet
 	if req.Range != nil && *req.Range != "" {
