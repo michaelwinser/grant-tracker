@@ -88,25 +88,23 @@ func main() {
 
 	// Register API routes if service account is available
 	if apiServer != nil && apiServer.IsConfigured() {
-		grantsFolderID := os.Getenv("GRANTS_FOLDER_ID")
-
 		// Config endpoint (public)
 		mux.HandleFunc("/api/config", apiServer.GetConfig)
 
-		// Sheets endpoints (require auth + drive access)
-		mux.HandleFunc("/api/sheets/read", api.RequireDriveAccess(grantsFolderID, apiServer.ReadSheet))
-		mux.HandleFunc("/api/sheets/append", api.RequireDriveAccess(grantsFolderID, apiServer.AppendRow))
-		mux.HandleFunc("/api/sheets/update", api.RequireDriveAccess(grantsFolderID, apiServer.UpdateRow))
-		mux.HandleFunc("/api/sheets/delete", api.RequireDriveAccess(grantsFolderID, apiServer.DeleteRow))
-		mux.HandleFunc("/api/sheets/batch-update", api.RequireDriveAccess(grantsFolderID, apiServer.BatchUpdateCells))
+		// Sheets endpoints (require auth + access check via service account)
+		mux.HandleFunc("/api/sheets/read", apiServer.RequireAccess(apiServer.ReadSheet))
+		mux.HandleFunc("/api/sheets/append", apiServer.RequireAccess(apiServer.AppendRow))
+		mux.HandleFunc("/api/sheets/update", apiServer.RequireAccess(apiServer.UpdateRow))
+		mux.HandleFunc("/api/sheets/delete", apiServer.RequireAccess(apiServer.DeleteRow))
+		mux.HandleFunc("/api/sheets/batch-update", apiServer.RequireAccess(apiServer.BatchUpdateCells))
 
-		// Drive endpoints (require auth + drive access)
-		mux.HandleFunc("/api/drive/list", api.RequireDriveAccess(grantsFolderID, apiServer.ListFiles))
-		mux.HandleFunc("/api/drive/create-folder", api.RequireDriveAccess(grantsFolderID, apiServer.CreateFolder))
-		mux.HandleFunc("/api/drive/create-doc", api.RequireDriveAccess(grantsFolderID, apiServer.CreateDoc))
-		mux.HandleFunc("/api/drive/create-shortcut", api.RequireDriveAccess(grantsFolderID, apiServer.CreateShortcut))
-		mux.HandleFunc("/api/drive/move", api.RequireDriveAccess(grantsFolderID, apiServer.MoveFile))
-		mux.HandleFunc("/api/drive/get", api.RequireDriveAccess(grantsFolderID, apiServer.GetFile))
+		// Drive endpoints (require auth + access check via service account)
+		mux.HandleFunc("/api/drive/list", apiServer.RequireAccess(apiServer.ListFiles))
+		mux.HandleFunc("/api/drive/create-folder", apiServer.RequireAccess(apiServer.CreateFolder))
+		mux.HandleFunc("/api/drive/create-doc", apiServer.RequireAccess(apiServer.CreateDoc))
+		mux.HandleFunc("/api/drive/create-shortcut", apiServer.RequireAccess(apiServer.CreateShortcut))
+		mux.HandleFunc("/api/drive/move", apiServer.RequireAccess(apiServer.MoveFile))
+		mux.HandleFunc("/api/drive/get", apiServer.RequireAccess(apiServer.GetFile))
 
 		log.Printf("Service account API routes registered")
 	} else {
@@ -163,12 +161,22 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	// Determine OAuth scopes based on service account availability
+	// If service account is enabled, users only need identity scopes (backend handles API calls)
+	// Otherwise, users need drive.file scope for direct API access
+	var scope string
+	if apiServer != nil {
+		scope = "openid email profile"
+	} else {
+		scope = "openid email profile https://www.googleapis.com/auth/drive.file"
+	}
+
 	// Build Google OAuth URL
 	authURL := "https://accounts.google.com/o/oauth2/v2/auth?" + url.Values{
 		"client_id":     {clientID},
 		"redirect_uri":  {redirectURI},
 		"response_type": {"code"},
-		"scope":         {"openid email profile https://www.googleapis.com/auth/drive.file"},
+		"scope":         {scope},
 		"access_type":   {"offline"},
 		"prompt":        {"consent"},
 		"state":         {state},

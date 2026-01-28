@@ -195,7 +195,7 @@ func RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// RequireDriveAccess wraps a handler with Drive access verification
+// RequireDriveAccess wraps a handler with Drive access verification (legacy, uses user token)
 func RequireDriveAccess(folderId string, next http.HandlerFunc) http.HandlerFunc {
 	return RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		userEmail := r.Header.Get("X-User-Email")
@@ -217,8 +217,8 @@ func RequireDriveAccess(folderId string, next http.HandlerFunc) http.HandlerFunc
 			return
 		}
 
-		// Verify access
-		hasAccess, err := verifyDriveAccess(userToken, folderId)
+		// Verify access using user's token
+		hasAccess, err := verifyDriveAccessWithToken(userToken, folderId)
 		if err != nil {
 			log.Printf("Error verifying drive access for %s: %v", userEmail, err)
 			writeError(w, "Failed to verify access permissions", http.StatusInternalServerError)
@@ -236,7 +236,50 @@ func RequireDriveAccess(folderId string, next http.HandlerFunc) http.HandlerFunc
 	})
 }
 
-func verifyDriveAccess(token, folderId string) (bool, error) {
+// RequireAccess wraps a handler with access verification using the service account
+// This is used when users have identity-only OAuth scopes
+func (s *Server) RequireAccess(next http.HandlerFunc) http.HandlerFunc {
+	return RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		userEmail := r.Header.Get("X-User-Email")
+		folderId := s.grantsFolderID
+
+		if folderId == "" {
+			writeError(w, "Server configuration error: GRANTS_FOLDER_ID not set", http.StatusInternalServerError)
+			return
+		}
+
+		// Check cache
+		hasAccess, cacheHit := checkAuthCache(userEmail, folderId)
+		if cacheHit {
+			if !hasAccess {
+				writeError(w, "Access denied. You do not have permission to this Grant Tracker instance.", http.StatusForbidden)
+				return
+			}
+			next(w, r)
+			return
+		}
+
+		// Verify access using service account
+		hasAccess, err := s.verifyDriveAccessWithServiceAccount(r.Context(), userEmail, folderId)
+		if err != nil {
+			log.Printf("Error verifying drive access for %s: %v", userEmail, err)
+			writeError(w, "Failed to verify access permissions", http.StatusInternalServerError)
+			return
+		}
+
+		setAuthCache(userEmail, folderId, hasAccess)
+
+		if !hasAccess {
+			writeError(w, "Access denied. You do not have permission to this Grant Tracker instance.", http.StatusForbidden)
+			return
+		}
+
+		next(w, r)
+	})
+}
+
+// verifyDriveAccessWithToken verifies access using the user's token (requires drive scopes)
+func verifyDriveAccessWithToken(token, folderId string) (bool, error) {
 	url := fmt.Sprintf("https://www.googleapis.com/drive/v3/files/%s?fields=id", folderId)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -260,6 +303,55 @@ func verifyDriveAccess(token, folderId string) (bool, error) {
 
 	body, _ := io.ReadAll(resp.Body)
 	return false, fmt.Errorf("unexpected response %d: %s", resp.StatusCode, string(body))
+}
+
+// verifyDriveAccessWithServiceAccount checks if a user has access to a folder
+// by listing the folder's permissions using the service account
+func (s *Server) verifyDriveAccessWithServiceAccount(ctx context.Context, userEmail, folderId string) (bool, error) {
+	srv, err := s.driveService(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get drive service: %w", err)
+	}
+
+	// List permissions on the folder
+	perms, err := srv.Permissions.List(folderId).
+		Fields("permissions(emailAddress,role,type)").
+		Do()
+	if err != nil {
+		return false, fmt.Errorf("failed to list permissions: %w", err)
+	}
+
+	// Check if user's email is in the permissions
+	for _, perm := range perms.Permissions {
+		// Check direct user permission
+		if perm.Type == "user" && perm.EmailAddress == userEmail {
+			return true, nil
+		}
+		// Check domain-wide permission (anyone in the domain)
+		if perm.Type == "domain" {
+			// Extract domain from user email
+			parts := splitEmail(userEmail)
+			if len(parts) == 2 && perm.Domain == parts[1] {
+				return true, nil
+			}
+		}
+		// "anyone" type means public access
+		if perm.Type == "anyone" {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// splitEmail splits an email into local and domain parts
+func splitEmail(email string) []string {
+	for i := len(email) - 1; i >= 0; i-- {
+		if email[i] == '@' {
+			return []string{email[:i], email[i+1:]}
+		}
+	}
+	return []string{email}
 }
 
 func checkAuthCache(email, folderId string) (bool, bool) {
