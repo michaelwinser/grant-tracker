@@ -3,6 +3,9 @@
  * Handles spreadsheet creation, validation, and schema initialization.
  */
 
+import { configStore } from '../stores/config.svelte.js';
+import { SheetsService } from './backend.js';
+
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 /**
@@ -718,44 +721,85 @@ function parseBooleanCell(value, defaultValue = false) {
 /**
  * Read full status configuration from the Status sheet.
  * Returns objects with status name and metadata (sortOrder, includeInBudget, hideByDefault).
+ * Uses backend API when service account is enabled.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  * @returns {Promise<Array<{status: string, sortOrder: number, includeInBudget: boolean, hideByDefault: boolean}>>}
  */
 export async function readStatusConfig(accessToken, spreadsheetId) {
   try {
-    const response = await fetch(
-      `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!A2:D?majorDimension=ROWS`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
+    let rows;
+
+    if (configStore.serviceAccountEnabled) {
+      // Use backend API
+      const response = await SheetsService.readSheet({
+        requestBody: { sheet: 'Status' },
+      });
+      // Backend returns {headers, rows} - convert to objects using headers
+      const headers = response.headers || [];
+      const rawRows = response.rows || [];
+
+      // Find column indices by header name (column order may vary)
+      const statusIdx = headers.indexOf('Status');
+      const sortOrderIdx = headers.indexOf('SortOrder');
+      const includeInBudgetIdx = headers.indexOf('IncludeInBudget');
+      const hideByDefaultIdx = headers.indexOf('HideByDefault');
+
+      // Convert rows to objects with correct field mapping
+      rows = rawRows.map(row => ({
+        status: statusIdx >= 0 ? row[statusIdx] : row[0],
+        sortOrder: sortOrderIdx >= 0 ? row[sortOrderIdx] : null,
+        includeInBudget: includeInBudgetIdx >= 0 ? row[includeInBudgetIdx] : null,
+        hideByDefault: hideByDefaultIdx >= 0 ? row[hideByDefaultIdx] : null,
+      }));
+    } else {
+      // Direct Google API
+      const response = await fetch(
+        `${SHEETS_API_BASE}/${spreadsheetId}/values/Status!A2:D?majorDimension=ROWS`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        // Status sheet may not exist, return defaults
+        return DEFAULT_STATUS_CONFIG;
       }
-    );
 
-    if (!response.ok) {
-      // Status sheet may not exist, return defaults
-      return DEFAULT_STATUS_CONFIG;
+      const data = await response.json();
+      rows = data.values || [];
     }
-
-    const data = await response.json();
-    const rows = data.values || [];
 
     if (rows.length === 0) {
       return DEFAULT_STATUS_CONFIG;
     }
 
     // Parse rows into status config objects
+    // Rows can be objects (from backend API) or arrays (from direct API)
     const config = rows
-      .filter(row => row[0]) // Filter out empty rows
+      .filter(row => {
+        // Filter out empty rows - check for status field or first element
+        const status = row.status !== undefined ? row.status : row[0];
+        return Boolean(status);
+      })
       .map((row, index) => {
-        const status = row[0];
+        // Handle both object format (backend) and array format (direct API)
+        const isObject = row.status !== undefined;
+        const status = isObject ? row.status : row[0];
+        const sortOrderVal = isObject ? row.sortOrder : row[1];
+        const includeInBudgetVal = isObject ? row.includeInBudget : row[2];
+        const hideByDefaultVal = isObject ? row.hideByDefault : row[3];
+
         // Find default config for this status to get fallback values
         const defaultConfig = DEFAULT_STATUS_CONFIG.find(d => d.status === status);
 
         return {
           status,
-          sortOrder: row[1] !== undefined && row[1] !== '' ? parseInt(row[1], 10) : (defaultConfig?.sortOrder ?? (index + 1) * 10),
-          includeInBudget: parseBooleanCell(row[2], defaultConfig?.includeInBudget ?? false),
-          hideByDefault: parseBooleanCell(row[3], defaultConfig?.hideByDefault ?? false),
+          sortOrder: sortOrderVal !== undefined && sortOrderVal !== null && sortOrderVal !== ''
+            ? parseInt(sortOrderVal, 10)
+            : (defaultConfig?.sortOrder ?? (index + 1) * 10),
+          includeInBudget: parseBooleanCell(includeInBudgetVal, defaultConfig?.includeInBudget ?? false),
+          hideByDefault: parseBooleanCell(hideByDefaultVal, defaultConfig?.hideByDefault ?? false),
         };
       });
 
@@ -763,7 +807,8 @@ export async function readStatusConfig(accessToken, spreadsheetId) {
     config.sort((a, b) => a.sortOrder - b.sortOrder);
 
     return config;
-  } catch {
+  } catch (err) {
+    console.error('[readStatusConfig] Error:', err);
     return DEFAULT_STATUS_CONFIG;
   }
 }
@@ -781,26 +826,40 @@ export async function readStatusValues(accessToken, spreadsheetId) {
 
 /**
  * Read dropdown values from the Tags sheet.
+ * Uses backend API when service account is enabled.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  * @returns {Promise<string[]>} - List of tag values
  */
 export async function readTagValues(accessToken, spreadsheetId) {
   try {
-    const response = await fetch(
-      `${SHEETS_API_BASE}/${spreadsheetId}/values/Tags!A2:A?majorDimension=COLUMNS`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
+    let values;
 
-    if (!response.ok) {
-      // Tags sheet may not exist, return defaults
-      return DEFAULT_TAG_VALUES;
+    if (configStore.serviceAccountEnabled) {
+      // Use backend API
+      const response = await SheetsService.readSheet({
+        requestBody: { sheet: 'Tags' },
+      });
+      // Extract first column (Name) from each row
+      values = (response.rows || []).map(row => row[0]).filter(Boolean);
+    } else {
+      // Direct Google API
+      const response = await fetch(
+        `${SHEETS_API_BASE}/${spreadsheetId}/values/Tags!A2:A?majorDimension=COLUMNS`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        // Tags sheet may not exist, return defaults
+        return DEFAULT_TAG_VALUES;
+      }
+
+      const data = await response.json();
+      values = data.values?.[0] || [];
     }
 
-    const data = await response.json();
-    const values = data.values?.[0] || [];
     return values.length > 0 ? values : DEFAULT_TAG_VALUES;
   } catch {
     return DEFAULT_TAG_VALUES;
@@ -809,26 +868,40 @@ export async function readTagValues(accessToken, spreadsheetId) {
 
 /**
  * Read approver names from the Approvers sheet.
+ * Uses backend API when service account is enabled.
  * @param {string} accessToken - OAuth access token
  * @param {string} spreadsheetId - Spreadsheet ID
  * @returns {Promise<string[]>} - List of approver names
  */
 export async function readApprovers(accessToken, spreadsheetId) {
   try {
-    const response = await fetch(
-      `${SHEETS_API_BASE}/${spreadsheetId}/values/Approvers!A2:A?majorDimension=COLUMNS`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
-    );
+    let values;
 
-    if (!response.ok) {
-      // Approvers sheet may not exist, return defaults
-      return DEFAULT_APPROVER_VALUES;
+    if (configStore.serviceAccountEnabled) {
+      // Use backend API
+      const response = await SheetsService.readSheet({
+        requestBody: { sheet: 'Approvers' },
+      });
+      // Extract first column (Name) from each row
+      values = (response.rows || []).map(row => row[0]).filter(Boolean);
+    } else {
+      // Direct Google API
+      const response = await fetch(
+        `${SHEETS_API_BASE}/${spreadsheetId}/values/Approvers!A2:A?majorDimension=COLUMNS`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+
+      if (!response.ok) {
+        // Approvers sheet may not exist, return defaults
+        return DEFAULT_APPROVER_VALUES;
+      }
+
+      const data = await response.json();
+      values = data.values?.[0] || [];
     }
 
-    const data = await response.json();
-    const values = data.values?.[0] || [];
     return values.length > 0 ? values : DEFAULT_APPROVER_VALUES;
   } catch {
     return DEFAULT_APPROVER_VALUES;

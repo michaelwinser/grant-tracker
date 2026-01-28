@@ -363,7 +363,8 @@ func (s *Server) ReadSheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := srv.Spreadsheets.Values.Get(s.spreadsheetID, rangeStr).Do()
+	resp, err := srv.Spreadsheets.Values.Get(s.spreadsheetID, rangeStr).
+		ValueRenderOption("UNFORMATTED_VALUE").Do()
 	if err != nil {
 		log.Printf("Failed to read sheet %s: %v", req.Sheet, err)
 		writeError(w, fmt.Sprintf("Failed to read sheet: %v", err), http.StatusInternalServerError)

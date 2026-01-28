@@ -66,15 +66,16 @@
   });
 
   // Calculate budget by category for filtered grants
+  // Note: Amount and Cat_*_Percent are normalized to numbers by the grants store
   let categoryBudgets = $derived.by(() => {
     const budgets = { A: 0, B: 0, C: 0, D: 0 };
 
     filteredGrants.forEach(grant => {
-      const amount = parseFloat(grant.Amount) || 0;
-      const pctA = parseFloat(grant.Cat_A_Percent) || 0;
-      const pctB = parseFloat(grant.Cat_B_Percent) || 0;
-      const pctC = parseFloat(grant.Cat_C_Percent) || 0;
-      const pctD = parseFloat(grant.Cat_D_Percent) || 0;
+      const amount = grant.Amount ?? 0;
+      const pctA = grant.Cat_A_Percent ?? 0;
+      const pctB = grant.Cat_B_Percent ?? 0;
+      const pctC = grant.Cat_C_Percent ?? 0;
+      const pctD = grant.Cat_D_Percent ?? 0;
 
       budgets.A += amount * (pctA / 100);
       budgets.B += amount * (pctB / 100);
@@ -96,13 +97,13 @@
       yearData[year] = { A: 0, B: 0, C: 0, D: 0 };
 
       grantsStore.grants
-        .filter(g => g.Year === parseInt(year))
+        .filter(g => String(g.Year) === year)
         .forEach(grant => {
-          const amount = parseFloat(grant.Amount) || 0;
-          const pctA = parseFloat(grant.Cat_A_Percent) || 0;
-          const pctB = parseFloat(grant.Cat_B_Percent) || 0;
-          const pctC = parseFloat(grant.Cat_C_Percent) || 0;
-          const pctD = parseFloat(grant.Cat_D_Percent) || 0;
+          const amount = grant.Amount ?? 0;
+          const pctA = grant.Cat_A_Percent ?? 0;
+          const pctB = grant.Cat_B_Percent ?? 0;
+          const pctC = grant.Cat_C_Percent ?? 0;
+          const pctD = grant.Cat_D_Percent ?? 0;
 
           yearData[year].A += amount * (pctA / 100);
           yearData[year].B += amount * (pctB / 100);
@@ -117,11 +118,11 @@
   // Grant breakdown with calculated category amounts
   let grantBreakdown = $derived.by(() => {
     return filteredGrants.map(grant => {
-      const amount = parseFloat(grant.Amount) || 0;
-      const pctA = parseFloat(grant.Cat_A_Percent) || 0;
-      const pctB = parseFloat(grant.Cat_B_Percent) || 0;
-      const pctC = parseFloat(grant.Cat_C_Percent) || 0;
-      const pctD = parseFloat(grant.Cat_D_Percent) || 0;
+      const amount = grant.Amount ?? 0;
+      const pctA = grant.Cat_A_Percent ?? 0;
+      const pctB = grant.Cat_B_Percent ?? 0;
+      const pctC = grant.Cat_C_Percent ?? 0;
+      const pctD = grant.Cat_D_Percent ?? 0;
 
       return {
         ID: grant.ID,

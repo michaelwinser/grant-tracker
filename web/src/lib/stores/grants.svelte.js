@@ -105,15 +105,36 @@ function getClient() {
 }
 
 /**
- * Normalize a row, handling empty values.
+ * Parse a numeric value, handling strings, numbers, and empty values.
+ * @param {any} value - Raw value
+ * @returns {number|null} - Parsed number or null
+ */
+function parseNumericValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return value;
+  }
+  // Handle string values (remove currency symbols, commas)
+  const cleaned = String(value).replace(/[$,]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * Normalize a row, handling empty values and converting numeric fields.
  * @param {Object} row - Raw row from sheets
- * @returns {Object} - Normalized row
+ * @returns {Object} - Normalized row with proper types
  */
 function normalizeGrant(row) {
   const normalized = {};
   for (const [key, value] of Object.entries(row)) {
     if (value === '' || value === undefined) {
       normalized[key] = null;
+    } else if (NUMBER_FIELDS.includes(key)) {
+      // Convert numeric fields to actual numbers
+      normalized[key] = parseNumericValue(value);
     } else {
       normalized[key] = value;
     }
@@ -139,21 +160,16 @@ async function load() {
       ? configStore.spreadsheetId
       : spreadsheetStore.spreadsheetId;
 
-    console.log('[Grants Store] Loading status config...');
     statusConfig = await readStatusConfig(
       userStore.accessToken,
       spreadsheetId
     );
-    console.log('[Grants Store] Status config loaded:', statusConfig);
 
     // Load grants
-    console.log('[Grants Store] Loading grants...');
     const rows = await client.readSheet('Grants');
-    console.log('[Grants Store] Raw rows:', rows.length);
     grants = rows
       .map(normalizeGrant)
       .filter((row) => row.ID); // Filter out empty rows
-    console.log('[Grants Store] Filtered grants:', grants.length);
     lastLoaded = new Date();
   } catch (err) {
     console.error('[Grants Store] Error:', err);
