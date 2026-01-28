@@ -74,7 +74,7 @@
     const counts = {};
     // Count grants matching current year filter
     const yearFiltered = yearFilter
-      ? grantsStore.grants.filter(g => g.Year === parseInt(yearFilter))
+      ? grantsStore.grants.filter(g => String(g.Year) === yearFilter)
       : grantsStore.grants;
 
     yearFiltered.forEach(g => {
@@ -121,7 +121,7 @@
 
     // Apply year filter
     if (yearFilter) {
-      result = result.filter(g => g.Year === parseInt(yearFilter));
+      result = result.filter(g => String(g.Year) === yearFilter);
     }
 
     // Apply "has open action items" filter

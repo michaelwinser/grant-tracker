@@ -30,7 +30,8 @@
   // Filter grants by year
   let filteredGrants = $derived.by(() => {
     if (!yearFilter) return grantsStore.grants;
-    return grantsStore.grants.filter(g => g.Year === parseInt(yearFilter));
+    // Compare as strings since API returns Year as string
+    return grantsStore.grants.filter(g => String(g.Year) === yearFilter);
   });
 
   // Pipeline stages with colors - only show visible statuses

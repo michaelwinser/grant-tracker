@@ -49,7 +49,7 @@
     let result = grantsStore.grants.filter(g => budgetStatuses.includes(g.Status));
 
     if (yearFilter) {
-      result = result.filter(g => g.Year === parseInt(yearFilter));
+      result = result.filter(g => String(g.Year) === yearFilter);
     }
 
     return result;
@@ -60,7 +60,7 @@
     const budgetStatuses = grantsStore.budgetStatuses;
     let allGrants = grantsStore.grants;
     if (yearFilter) {
-      allGrants = allGrants.filter(g => g.Year === parseInt(yearFilter));
+      allGrants = allGrants.filter(g => String(g.Year) === yearFilter);
     }
     return allGrants.filter(g => !budgetStatuses.includes(g.Status)).length;
   });
