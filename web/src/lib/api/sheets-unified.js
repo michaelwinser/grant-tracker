@@ -41,7 +41,17 @@ function createBackendSheetsClient() {
       requestBody: { sheet: sheetName },
     });
 
-    return rowsToObjects(response);
+    console.log(`[Backend API] readSheet(${sheetName}) response:`, response);
+    console.log(`[Backend API] headers:`, response?.headers);
+    console.log(`[Backend API] rows count:`, response?.rows?.length);
+
+    const objects = rowsToObjects(response);
+    console.log(`[Backend API] converted to ${objects.length} objects`);
+    if (objects.length > 0) {
+      console.log(`[Backend API] first object:`, objects[0]);
+    }
+
+    return objects;
   }
 
   /**
