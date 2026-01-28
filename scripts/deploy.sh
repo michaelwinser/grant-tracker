@@ -101,23 +101,21 @@ gcloud builds submit \
 ENV_VARS_FILE=$(mktemp)
 trap "rm -f $ENV_VARS_FILE" EXIT
 
-cat > "$ENV_VARS_FILE" << ENVEOF
-GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
-GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
-REDIRECT_URI: "${REDIRECT_URI}"
-ENVEOF
+# Write basic env vars
+printf 'GOOGLE_CLIENT_ID: "%s"\n' "$GOOGLE_CLIENT_ID" > "$ENV_VARS_FILE"
+printf 'GOOGLE_CLIENT_SECRET: "%s"\n' "$GOOGLE_CLIENT_SECRET" >> "$ENV_VARS_FILE"
+printf 'REDIRECT_URI: "%s"\n' "$REDIRECT_URI" >> "$ENV_VARS_FILE"
 
-# Add service account and data config if set
+# Add service account key using YAML literal block scalar to preserve JSON exactly
 if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
-    # Use single quotes and escape any single quotes in the JSON
-    ESCAPED_KEY=$(echo "$GOOGLE_SERVICE_ACCOUNT_KEY" | sed "s/'/''/g")
-    echo "GOOGLE_SERVICE_ACCOUNT_KEY: '${ESCAPED_KEY}'" >> "$ENV_VARS_FILE"
+    printf 'GOOGLE_SERVICE_ACCOUNT_KEY: |-\n' >> "$ENV_VARS_FILE"
+    printf '  %s\n' "$GOOGLE_SERVICE_ACCOUNT_KEY" >> "$ENV_VARS_FILE"
 fi
 if [ -n "$SPREADSHEET_ID" ]; then
-    echo "SPREADSHEET_ID: \"${SPREADSHEET_ID}\"" >> "$ENV_VARS_FILE"
+    printf 'SPREADSHEET_ID: "%s"\n' "$SPREADSHEET_ID" >> "$ENV_VARS_FILE"
 fi
 if [ -n "$GRANTS_FOLDER_ID" ]; then
-    echo "GRANTS_FOLDER_ID: \"${GRANTS_FOLDER_ID}\"" >> "$ENV_VARS_FILE"
+    printf 'GRANTS_FOLDER_ID: "%s"\n' "$GRANTS_FOLDER_ID" >> "$ENV_VARS_FILE"
 fi
 
 # Deploy to Cloud Run with all environment variables set at once
