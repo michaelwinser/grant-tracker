@@ -344,8 +344,8 @@ The existing StatusHistory sheet pattern should continue to work, but the "Chang
 3. [x] Update config store to track `serviceAccountEnabled`, `spreadsheetId`, `grantsFolderId`
 4. [x] Update grants store to use unified client
 5. [x] Update actionItems store to use unified client
-6. [ ] Update remaining stores (reports, artifacts, statusHistory, etc.)
-7. [ ] Update components using Drive API directly
+6. [x] Update remaining stores (reports, artifacts, statusHistory)
+7. [x] Update components using Drive API directly (GrantDetail, GrantFormModal, FolderPicker, ReportsPage)
 8. [ ] Simplify OAuth to identity-only scopes
 9. [ ] Remove extended access toggle (no longer needed)
 

@@ -17,6 +17,7 @@ usage() {
     echo ""
     echo "  dev         Start Vite dev server with hot reload (port 5174)"
     echo "  dev-build   Rebuild the dev container"
+    echo "  run <cmd>   Run a command in the dev container"
     echo ""
     echo "  commit <msg> [files...]  Git commit with Co-Authored-By trailer"
     echo ""
@@ -26,6 +27,8 @@ usage() {
     echo ""
     echo "Examples:"
     echo "  ./gt build && ./gt start           # Local testing"
+    echo "  ./gt run npm run build             # Build frontend in container"
+    echo "  ./gt run npm install               # Install dependencies"
     echo "  ./gt gcp deploy staging            # Deploy to staging"
     echo "  ./gt gcp deploy prod               # Deploy to production"
     echo "  ./gt gcp domain staging grants-staging.example.com"
@@ -133,6 +136,36 @@ dev() {
 dev_build() {
     echo "Building dev container..."
     docker build -t "$DEV_IMAGE_NAME" -f .devcontainer/Dockerfile .
+}
+
+# Run a command in the dev container
+run_cmd() {
+    if [ $# -eq 0 ]; then
+        echo "Usage: ./gt run <command>"
+        echo ""
+        echo "Examples:"
+        echo "  ./gt run npm run build"
+        echo "  ./gt run npm install"
+        echo "  ./gt run go build ./..."
+        exit 1
+    fi
+
+    # Check if dev image exists
+    if ! docker image inspect "$DEV_IMAGE_NAME" >/dev/null 2>&1; then
+        echo "Dev image not found. Building first..."
+        dev_build
+    fi
+
+    local tty_flags=""
+    if [ -t 0 ]; then
+        tty_flags="-it"
+    fi
+
+    docker run --rm $tty_flags \
+        -v "$(pwd)":/workspace \
+        -w /workspace \
+        "$DEV_IMAGE_NAME" \
+        "$@"
 }
 
 # Git commit with automatic Co-Authored-By trailer
@@ -383,6 +416,10 @@ case "${1:-}" in
         ;;
     dev-build)
         dev_build
+        ;;
+    run)
+        shift
+        run_cmd "$@"
         ;;
     commit)
         shift

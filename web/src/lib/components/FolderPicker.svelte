@@ -4,7 +4,7 @@
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
   import { configStore } from '../stores/config.svelte.js';
   import { openFolderPicker } from '../api/picker.js';
-  import { createFolder, findOrCreateFolder, listFiles } from '../api/drive.js';
+  import { createFolder, findOrCreateFolder, listFiles } from '../api/drive-unified.js';
   import { createSpreadsheet, validateSchema } from '../api/sheets.js';
 
   let mode = $state('select'); // 'select' | 'creating' | 'setting-up' | 'setting-up-spreadsheet'

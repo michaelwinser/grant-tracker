@@ -8,7 +8,7 @@
   import { router, navigate } from '../router.svelte.js';
   import StatusBadge from './StatusBadge.svelte';
   import GrantFormModal from './GrantFormModal.svelte';
-  import { createGrantFolderStructure, listFiles, addFileToFolder, findFolder, copyFile, createShortcut } from '../api/drive.js';
+  import { createGrantFolderStructure, listFiles, addFileToFolder, findFolder, copyFile, createShortcut } from '../api/drive-unified.js';
   import { openFilePicker, openFolderPicker } from '../api/picker.js';
   import { syncGrantToTrackerDoc } from '../api/docs.js';
   import { readApprovers } from '../api/sheets.js';

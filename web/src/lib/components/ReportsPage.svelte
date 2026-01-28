@@ -2,7 +2,7 @@
   import { grantsStore } from '../stores/grants.svelte.js';
   import { userStore } from '../stores/user.svelte.js';
   import { navigate } from '../router.svelte.js';
-  import { listFiles } from '../api/drive.js';
+  import { listFiles } from '../api/drive-unified.js';
 
   // State
   let allReports = $state([]);

@@ -4,7 +4,7 @@
   import { userStore } from '../stores/user.svelte.js';
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
   import { GrantStatus } from '../models.js';
-  import { createGrantFolderStructure } from '../api/drive.js';
+  import { createGrantFolderStructure } from '../api/drive-unified.js';
 
   // Props
   let {
