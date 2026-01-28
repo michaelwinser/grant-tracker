@@ -349,7 +349,7 @@ func (s *Server) ReadSheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[API] ReadSheet: %s", req.Sheet)
+	log.Printf("[API] ReadSheet: %s (spreadsheet: %s)", req.Sheet, maskString(s.spreadsheetID))
 
 	rangeStr := req.Sheet
 	if req.Range != nil && *req.Range != "" {
@@ -380,6 +380,11 @@ func (s *Server) ReadSheet(w http.ResponseWriter, r *http.Request) {
 		if len(resp.Values) > 1 {
 			rows = resp.Values[1:]
 		}
+	}
+
+	log.Printf("[API] ReadSheet %s: %d headers, %d rows", req.Sheet, len(headers), len(rows))
+	if len(headers) > 0 {
+		log.Printf("[API]   Headers: %v", headers)
 	}
 
 	writeJSON(w, ReadSheetResponse{Headers: headers, Rows: rows})
