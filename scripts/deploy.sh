@@ -145,11 +145,8 @@ ENV_VARS="${ENV_VARS},REDIRECT_URI=${REDIRECT_URI}"
 if [ -n "$SA_ENV_ARG" ]; then
     ENV_VARS="${ENV_VARS},${SA_ENV_ARG}"
 fi
-if [ -n "$SPREADSHEET_ID" ]; then
-    ENV_VARS="${ENV_VARS},SPREADSHEET_ID=${SPREADSHEET_ID}"
-fi
-if [ -n "$GRANTS_FOLDER_ID" ]; then
-    ENV_VARS="${ENV_VARS},GRANTS_FOLDER_ID=${GRANTS_FOLDER_ID}"
+if [ -n "$ROOT_FOLDER_ID" ]; then
+    ENV_VARS="${ENV_VARS},ROOT_FOLDER_ID=${ROOT_FOLDER_ID}"
 fi
 
 # Deploy to Cloud Run
