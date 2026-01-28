@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -1273,31 +1274,42 @@ func (s *Server) InitializeTrackerDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build the document content
-	var requests []*docs.Request
+	// Build the document content as a single text block
+	// We'll use simple text formatting instead of complex tables
+	var content strings.Builder
 
-	// Start with Status heading
-	content := "Status\n\n"
+	// Status section (heading will be formatted separately)
+	content.WriteString("Status\n\n")
 
-	// Add project metadata table if grant data provided
+	// Project Metadata section
 	if len(req.Grant) > 0 {
-		content += "Project Metadata\n"
+		content.WriteString("Project Metadata\n")
+
+		// Add metadata fields
+		fieldOrder := []string{"ID", "Title", "Organization", "Amount", "Status", "Year"}
+		for _, field := range fieldOrder {
+			if val, ok := req.Grant[field]; ok && val != "" {
+				content.WriteString(fmt.Sprintf("%s: %s\n", field, val))
+			}
+		}
+		content.WriteString("\n")
 	}
 
-	// Insert the content at the beginning
+	// Insert all content at once
+	var requests []*docs.Request
 	requests = append(requests, &docs.Request{
 		InsertText: &docs.InsertTextRequest{
 			Location: &docs.Location{Index: 1},
-			Text:     content,
+			Text:     content.String(),
 		},
 	})
 
-	// Format "Status" as Heading 1
+	// Format "Status" as Heading 1 (characters 1-7, plus newline at 8)
 	requests = append(requests, &docs.Request{
 		UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
 			Range: &docs.Range{
 				StartIndex: 1,
-				EndIndex:   8, // "Status\n"
+				EndIndex:   8,
 			},
 			ParagraphStyle: &docs.ParagraphStyle{
 				NamedStyleType: "HEADING_1",
@@ -1306,15 +1318,14 @@ func (s *Server) InitializeTrackerDoc(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 
-	// If we have grant data, format "Project Metadata" as Heading 2
+	// Format "Project Metadata" as Heading 2 if we have grant data
 	if len(req.Grant) > 0 {
-		metadataStart := 9 // After "Status\n\n"
-		metadataEnd := metadataStart + 17 // "Project Metadata\n"
+		// After "Status\n\n" (8 chars), "Project Metadata\n" starts at index 9
 		requests = append(requests, &docs.Request{
 			UpdateParagraphStyle: &docs.UpdateParagraphStyleRequest{
 				Range: &docs.Range{
-					StartIndex: int64(metadataStart),
-					EndIndex:   int64(metadataEnd),
+					StartIndex: 9,
+					EndIndex:   26, // "Project Metadata\n" is 17 chars, so 9+17=26
 				},
 				ParagraphStyle: &docs.ParagraphStyle{
 					NamedStyleType: "HEADING_2",
@@ -1322,38 +1333,6 @@ func (s *Server) InitializeTrackerDoc(w http.ResponseWriter, r *http.Request) {
 				Fields: "namedStyleType",
 			},
 		})
-
-		// Build metadata table content
-		tableRows := [][]string{
-			{"Field", "Value"},
-		}
-
-		// Add key grant fields
-		fieldOrder := []string{"ID", "Title", "Organization", "Amount", "Status", "Year"}
-		for _, field := range fieldOrder {
-			if val, ok := req.Grant[field]; ok && val != "" {
-				tableRows = append(tableRows, []string{field, val})
-			}
-		}
-
-		// Create and insert table if we have data
-		if len(tableRows) > 1 {
-			// Insert table after the heading
-			tableIndex := int64(metadataEnd)
-			requests = append(requests, &docs.Request{
-				InsertTable: &docs.InsertTableRequest{
-					Location: &docs.Location{Index: tableIndex},
-					Rows:     int64(len(tableRows)),
-					Columns:  2,
-				},
-			})
-		}
-	}
-
-	// Add Approvals section if approvers provided
-	if len(req.Approvers) > 0 {
-		// We'll add this after the initial content is inserted
-		// For now, just add a placeholder - the table structure is complex
 	}
 
 	// Execute batch update
