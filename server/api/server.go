@@ -34,18 +34,40 @@ func NewServer(clientID string) (*Server, error) {
 		grantsFolderID: os.Getenv("GRANTS_FOLDER_ID"),
 	}
 
+	log.Printf("[API] Initializing server...")
+	log.Printf("[API]   Client ID: %s", maskString(clientID))
+	log.Printf("[API]   Spreadsheet ID: %s", maskString(s.spreadsheetID))
+	log.Printf("[API]   Grants Folder ID: %s", maskString(s.grantsFolderID))
+
 	// Load service account credentials
 	if keyJSON := os.Getenv("GOOGLE_SERVICE_ACCOUNT_KEY"); keyJSON != "" {
 		s.credentials = []byte(keyJSON)
+		log.Printf("[API]   Service account: loaded from GOOGLE_SERVICE_ACCOUNT_KEY (%d bytes)", len(keyJSON))
 	} else if keyPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); keyPath != "" {
 		var err error
 		s.credentials, err = os.ReadFile(keyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read service account key file: %w", err)
 		}
+		log.Printf("[API]   Service account: loaded from file %s (%d bytes)", keyPath, len(s.credentials))
+	} else {
+		log.Printf("[API]   Service account: NOT CONFIGURED")
 	}
 
+	log.Printf("[API]   IsConfigured: %v", s.IsConfigured())
+
 	return s, nil
+}
+
+// maskString masks all but the first 8 and last 4 characters
+func maskString(s string) string {
+	if s == "" {
+		return "(not set)"
+	}
+	if len(s) <= 12 {
+		return s[:len(s)/2] + "..."
+	}
+	return s[:8] + "..." + s[len(s)-4:]
 }
 
 // IsConfigured returns true if the server has service account credentials
@@ -271,6 +293,11 @@ func (s *Server) GetConfig(w http.ResponseWriter, r *http.Request) {
 			config.GrantsFolderId = &s.grantsFolderID
 		}
 	}
+
+	log.Printf("[API] GetConfig: serviceAccountEnabled=%v, spreadsheetId=%v, grantsFolderId=%v",
+		config.ServiceAccountEnabled,
+		config.SpreadsheetId != nil,
+		config.GrantsFolderId != nil)
 
 	writeJSON(w, config)
 }

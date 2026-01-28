@@ -68,10 +68,12 @@ start() {
         echo "Create scripts/envs/local.env from scripts/envs/local.env.example"
     fi
 
-    echo "Starting app on http://localhost:8080"
+    local port="${PORT:-9800}"
+    echo "Starting app on http://localhost:$port"
     docker run --rm -d \
         --name "$CONTAINER_NAME" \
-        -p 8080:8080 \
+        -p "$port:8080" \
+        -e "PORT=8080" \
         $env_file \
         "$IMAGE_NAME"
 
