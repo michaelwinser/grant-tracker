@@ -68,6 +68,14 @@ start() {
         echo "Create scripts/envs/local.env from scripts/envs/local.env.example"
     fi
 
+    # Mount service account key file if it exists
+    local sa_mount=""
+    local sa_env=""
+    if [ -f .secrets/service-account-key.json ]; then
+        sa_mount="-v $(pwd)/.secrets/service-account-key.json:/secrets/service-account.json:ro"
+        sa_env="-e GOOGLE_APPLICATION_CREDENTIALS=/secrets/service-account.json"
+    fi
+
     local port="${PORT:-9800}"
     echo "Starting app on http://localhost:$port"
     docker run --rm -d \
@@ -76,6 +84,8 @@ start() {
         -e "PORT=8080" \
         -e "PUBLIC_URL=http://localhost:$port" \
         $env_file \
+        $sa_mount \
+        $sa_env \
         "$IMAGE_NAME"
 
     echo "Container started. Use './gt logs' to see output."

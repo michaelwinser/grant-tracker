@@ -93,19 +93,21 @@ gcloud artifacts repositories create "$SERVICE_NAME" \
     --description="Grant Tracker container images ($ENV)"
 
 # Handle service account key via Secret Manager (avoids shell escaping issues)
+# Prefer file-based key (scripts/envs/service-account.json) over env var
 SECRET_MOUNT_ARG=""
 SA_ENV_ARG=""
-if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
-    echo "Setting up service account key in Secret Manager..."
+SA_KEY_FILE="$PROJECT_ROOT/.secrets/service-account-key.json"
+
+if [ -f "$SA_KEY_FILE" ]; then
+    echo "Setting up service account key in Secret Manager (from file)..."
 
     # Check if secret exists
-    # Use printf to avoid echo interpreting escape sequences in the JSON
     if gcloud secrets describe "$SECRET_NAME" &>/dev/null; then
         echo "  Secret '$SECRET_NAME' exists, adding new version..."
-        printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" | gcloud secrets versions add "$SECRET_NAME" --data-file=-
+        gcloud secrets versions add "$SECRET_NAME" --data-file="$SA_KEY_FILE"
     else
         echo "  Creating secret '$SECRET_NAME'..."
-        printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" | gcloud secrets create "$SECRET_NAME" --data-file=-
+        gcloud secrets create "$SECRET_NAME" --data-file="$SA_KEY_FILE"
     fi
 
     # Get the project number for the compute service account
@@ -122,6 +124,10 @@ if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
     # Build the secret mount argument for Cloud Run
     SECRET_MOUNT_ARG="--set-secrets=/secrets/service-account.json=${SECRET_NAME}:latest"
     SA_ENV_ARG="GOOGLE_APPLICATION_CREDENTIALS=/secrets/service-account.json"
+elif [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+    echo "Warning: GOOGLE_SERVICE_ACCOUNT_KEY in env file is deprecated."
+    echo "Please save the JSON to: .secrets/service-account-key.json"
+    echo "Skipping service account setup."
 fi
 
 # Build using Cloud Build (no local Docker needed)
