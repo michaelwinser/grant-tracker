@@ -340,31 +340,51 @@ gcp_service_account() {
     echo ""
     echo "Creating service account key..."
 
+    # Get the directory where the gt script lives (not pwd)
+    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local KEY_DIR="$SCRIPT_DIR/.secrets"
+    KEY_FILE="$KEY_DIR/service-account-key.json"
+
     # Remove old key if it exists
     rm -f "$KEY_FILE"
+    mkdir -p "$KEY_DIR"
 
-    # Create directory and key file inside container to avoid permission issues
+    echo "Key will be saved to: $KEY_FILE"
+
+    # Create key file - use absolute path inside container
     docker run --rm \
-        -v "$(pwd)":/workspace \
-        -v "$(pwd)/.gcloud":/root/.config/gcloud \
+        -v "$SCRIPT_DIR":/workspace \
+        -v "$SCRIPT_DIR/.gcloud":/root/.config/gcloud \
         -w /workspace \
         "$DEV_IMAGE_NAME" \
-        sh -c "mkdir -p .secrets && gcloud iam service-accounts keys create .secrets/service-account-key.json --iam-account='$SA_EMAIL' --project='$PROJECT_ID' && chmod 644 .secrets/service-account-key.json"
+        sh -c "gcloud iam service-accounts keys create /workspace/.secrets/service-account-key.json --iam-account='$SA_EMAIL' --project='$PROJECT_ID'"
 
-    if [ $? -ne 0 ]; then
-        echo "Error: Failed to create service account key"
+    local exit_code=$?
+
+    # Debug: show what's in the container's view
+    echo ""
+    echo "Checking files created..."
+    docker run --rm \
+        -v "$SCRIPT_DIR":/workspace \
+        "$DEV_IMAGE_NAME" \
+        ls -la /workspace/.secrets/ 2>/dev/null || true
+
+    if [ $exit_code -ne 0 ]; then
+        echo "Error: gcloud command failed"
         exit 1
     fi
 
-    # Verify the key was created (give it a moment for filesystem sync)
-    sleep 1
+    # Verify the key was created
     if [ ! -f "$KEY_FILE" ]; then
-        # Try to see what's in the directory
-        echo "Warning: Key file not found at expected location."
-        echo "Checking .secrets directory..."
-        ls -la "$(pwd)/.secrets/" 2>/dev/null || echo "Directory does not exist"
+        echo ""
+        echo "Error: Key file not found at $KEY_FILE"
+        echo "Checking host directory..."
+        ls -la "$KEY_DIR" 2>/dev/null || echo "Directory $KEY_DIR does not exist on host"
         exit 1
     fi
+
+    # Make sure it's readable
+    chmod 644 "$KEY_FILE"
 
     echo ""
     echo "=== Service Account Created ==="
