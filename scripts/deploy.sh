@@ -99,12 +99,13 @@ if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
     echo "Setting up service account key in Secret Manager..."
 
     # Check if secret exists
+    # Use printf to avoid echo interpreting escape sequences in the JSON
     if gcloud secrets describe "$SECRET_NAME" &>/dev/null; then
         echo "  Secret '$SECRET_NAME' exists, adding new version..."
-        echo "$GOOGLE_SERVICE_ACCOUNT_KEY" | gcloud secrets versions add "$SECRET_NAME" --data-file=-
+        printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" | gcloud secrets versions add "$SECRET_NAME" --data-file=-
     else
         echo "  Creating secret '$SECRET_NAME'..."
-        echo "$GOOGLE_SERVICE_ACCOUNT_KEY" | gcloud secrets create "$SECRET_NAME" --data-file=-
+        printf '%s' "$GOOGLE_SERVICE_ACCOUNT_KEY" | gcloud secrets create "$SECRET_NAME" --data-file=-
     fi
 
     # Get the project number for the compute service account
