@@ -97,21 +97,27 @@ gcloud builds submit \
     --tag "$IMAGE_NAME" \
     --quiet
 
-# Build env vars string for Cloud Run
-# Use ^@^ as separator since service account key JSON contains commas
-ENV_VARS="GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
-ENV_VARS="${ENV_VARS}@GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
-ENV_VARS="${ENV_VARS}@REDIRECT_URI=${REDIRECT_URI}"
+# Create temp env vars file for Cloud Run (handles JSON and special chars properly)
+ENV_VARS_FILE=$(mktemp)
+trap "rm -f $ENV_VARS_FILE" EXIT
+
+cat > "$ENV_VARS_FILE" << ENVEOF
+GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
+GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
+REDIRECT_URI: "${REDIRECT_URI}"
+ENVEOF
 
 # Add service account and data config if set
 if [ -n "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
-    ENV_VARS="${ENV_VARS}@GOOGLE_SERVICE_ACCOUNT_KEY=${GOOGLE_SERVICE_ACCOUNT_KEY}"
+    # Use single quotes and escape any single quotes in the JSON
+    ESCAPED_KEY=$(echo "$GOOGLE_SERVICE_ACCOUNT_KEY" | sed "s/'/''/g")
+    echo "GOOGLE_SERVICE_ACCOUNT_KEY: '${ESCAPED_KEY}'" >> "$ENV_VARS_FILE"
 fi
 if [ -n "$SPREADSHEET_ID" ]; then
-    ENV_VARS="${ENV_VARS}@SPREADSHEET_ID=${SPREADSHEET_ID}"
+    echo "SPREADSHEET_ID: \"${SPREADSHEET_ID}\"" >> "$ENV_VARS_FILE"
 fi
 if [ -n "$GRANTS_FOLDER_ID" ]; then
-    ENV_VARS="${ENV_VARS}@GRANTS_FOLDER_ID=${GRANTS_FOLDER_ID}"
+    echo "GRANTS_FOLDER_ID: \"${GRANTS_FOLDER_ID}\"" >> "$ENV_VARS_FILE"
 fi
 
 # Deploy to Cloud Run with all environment variables set at once
@@ -121,7 +127,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --region "$GCP_REGION" \
     --platform managed \
     --allow-unauthenticated \
-    --set-env-vars "^@^${ENV_VARS}" \
+    --env-vars-file "$ENV_VARS_FILE" \
     --quiet
 
 # Get the service URL (for display only - we use the configured REDIRECT_URI)
