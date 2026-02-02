@@ -50,6 +50,13 @@
   let conflictContext = $state(null); // 'attachment' | 'report'
   let isResolvingConflict = $state(false);
 
+  // Add by URL state (for service account mode)
+  let showAddByUrlModal = $state(false);
+  let addByUrlInput = $state('');
+  let addByUrlContext = $state(null); // 'attachment' | 'report'
+  let isAddingByUrl = $state(false);
+  let addByUrlError = $state(null);
+
   // Action items state
   let syncMessage = $state(null);
   let syncSuccess = $state(false);
@@ -489,6 +496,88 @@
     conflictContext = null;
   }
 
+  /**
+   * Extract a Google Drive file ID from a URL or return the input if it's already an ID.
+   * Supports URLs like:
+   * - https://drive.google.com/file/d/FILE_ID/view
+   * - https://drive.google.com/open?id=FILE_ID
+   * - https://docs.google.com/document/d/FILE_ID/edit
+   * - https://docs.google.com/spreadsheets/d/FILE_ID/edit
+   * - Just the FILE_ID itself
+   */
+  function extractFileId(input) {
+    if (!input) return null;
+    const trimmed = input.trim();
+
+    // Try to extract from various Google Drive/Docs URL formats
+    const patterns = [
+      /\/d\/([a-zA-Z0-9_-]+)/,           // /d/FILE_ID/ format
+      /[?&]id=([a-zA-Z0-9_-]+)/,         // ?id=FILE_ID format
+      /\/folders\/([a-zA-Z0-9_-]+)/,     // /folders/FILE_ID format
+    ];
+
+    for (const pattern of patterns) {
+      const match = trimmed.match(pattern);
+      if (match) return match[1];
+    }
+
+    // If no URL pattern matched, check if it looks like a raw file ID
+    // Google file IDs are typically 25-44 characters of alphanumeric plus - and _
+    if (/^[a-zA-Z0-9_-]{10,}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    return null;
+  }
+
+  function openAddByUrlModal(context) {
+    addByUrlContext = context;
+    addByUrlInput = '';
+    addByUrlError = null;
+    showAddByUrlModal = true;
+  }
+
+  function closeAddByUrlModal() {
+    showAddByUrlModal = false;
+    addByUrlInput = '';
+    addByUrlContext = null;
+    addByUrlError = null;
+  }
+
+  async function handleAddByUrl() {
+    const fileId = extractFileId(addByUrlInput);
+    if (!fileId) {
+      addByUrlError = 'Please enter a valid Google Drive URL or file ID';
+      return;
+    }
+
+    const currentGrant = grant();
+    if (!currentGrant?.Folder_URL) return;
+
+    const folderId = addByUrlContext === 'report' ? reportsFolderId : getFolderIdFromUrl(currentGrant.Folder_URL);
+    if (!folderId) return;
+
+    isAddingByUrl = true;
+    addByUrlError = null;
+
+    try {
+      await createShortcut(userStore.accessToken, fileId, folderId);
+
+      // Refresh the appropriate list
+      if (addByUrlContext === 'report' && reportsFolderId) {
+        await loadReports(reportsFolderId);
+      } else {
+        await loadAttachments(currentGrant);
+      }
+
+      closeAddByUrlModal();
+    } catch (err) {
+      addByUrlError = err.message;
+    } finally {
+      isAddingByUrl = false;
+    }
+  }
+
   // Helper to get effective mimeType for display (resolves shortcuts)
   function getEffectiveMimeType(file) {
     if (file.mimeType === 'application/vnd.google-apps.shortcut' && file.shortcutDetails?.targetMimeType) {
@@ -736,24 +825,26 @@
             {:else if folderStore.hasGrantsFolder}
               <p class="text-sm text-gray-500 mb-3">No Drive folder linked.</p>
               <div class="flex flex-col sm:flex-row items-center justify-center gap-2">
-                <button
-                  onclick={handleLinkFolder}
-                  disabled={isLinkingFolder}
-                  class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-wait"
-                >
-                  {#if isLinkingFolder}
-                    <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                    </svg>
-                    Linking...
-                  {:else}
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    Link Existing
-                  {/if}
-                </button>
+                {#if !configStore.serviceAccountEnabled}
+                  <button
+                    onclick={handleLinkFolder}
+                    disabled={isLinkingFolder}
+                    class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-wait"
+                  >
+                    {#if isLinkingFolder}
+                      <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                      </svg>
+                      Linking...
+                    {:else}
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      Link Existing
+                    {/if}
+                  </button>
+                {/if}
                 <button
                   onclick={handleCreateFolder}
                   disabled={isCreatingFolder}
@@ -803,23 +894,35 @@
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-semibold text-gray-900">Attachments</h2>
-            <button
-              onclick={handleAddAttachment}
-              disabled={isAddingAttachment}
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md disabled:opacity-50"
-            >
-              {#if isAddingAttachment}
-                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                </svg>
-              {:else}
+            {#if !configStore.serviceAccountEnabled}
+              <button
+                onclick={handleAddAttachment}
+                disabled={isAddingAttachment}
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md disabled:opacity-50"
+              >
+                {#if isAddingAttachment}
+                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                {:else}
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                {/if}
+                Add File
+              </button>
+            {:else}
+              <button
+                onclick={() => openAddByUrlModal('attachment')}
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md"
+              >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-              {/if}
-              Add File
-            </button>
+                Add by URL
+              </button>
+            {/if}
           </div>
           {#if addFileError}
             <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -933,23 +1036,35 @@
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-semibold text-gray-900">Reports</h2>
-            <button
-              onclick={handleAddReport}
-              disabled={isAddingReport}
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md disabled:opacity-50"
-            >
-              {#if isAddingReport}
-                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                </svg>
-              {:else}
+            {#if !configStore.serviceAccountEnabled}
+              <button
+                onclick={handleAddReport}
+                disabled={isAddingReport}
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md disabled:opacity-50"
+              >
+                {#if isAddingReport}
+                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                {:else}
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                {/if}
+                Add Report
+              </button>
+            {:else}
+              <button
+                onclick={() => openAddByUrlModal('report')}
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md"
+              >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-              {/if}
-              Add Report
-            </button>
+                Add by URL
+              </button>
+            {/if}
           </div>
           {#if isLoadingReports}
             <div class="flex items-center gap-2 text-gray-500">
@@ -1301,6 +1416,82 @@
           >
             Cancel
           </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Add by URL Modal -->
+  {#if showAddByUrlModal}
+    <div class="fixed inset-0 z-50 overflow-y-auto">
+      <div class="flex min-h-full items-center justify-center p-4">
+        <!-- Backdrop -->
+        <button
+          type="button"
+          class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity cursor-default"
+          onclick={closeAddByUrlModal}
+          aria-label="Close dialog"
+        ></button>
+
+        <!-- Modal -->
+        <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">
+              Add {addByUrlContext === 'report' ? 'Report' : 'File'} by URL
+            </h3>
+            <p class="text-sm text-gray-600 mt-1">
+              Paste a Google Drive URL or file ID to create a shortcut in this folder.
+            </p>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <label for="file-url" class="block text-sm font-medium text-gray-700 mb-1">
+                Drive URL or File ID
+              </label>
+              <input
+                id="file-url"
+                type="text"
+                bind:value={addByUrlInput}
+                placeholder="https://drive.google.com/file/d/... or file ID"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                onkeydown={(e) => e.key === 'Enter' && handleAddByUrl()}
+              />
+            </div>
+
+            {#if addByUrlError}
+              <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {addByUrlError}
+              </div>
+            {/if}
+          </div>
+
+          <div class="mt-6 flex gap-3">
+            <button
+              onclick={closeAddByUrlModal}
+              disabled={isAddingByUrl}
+              class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onclick={handleAddByUrl}
+              disabled={isAddingByUrl || !addByUrlInput.trim()}
+              class="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {#if isAddingByUrl}
+                <span class="inline-flex items-center gap-2">
+                  <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  Adding...
+                </span>
+              {:else}
+                Add Shortcut
+              {/if}
+            </button>
+          </div>
         </div>
       </div>
     </div>
