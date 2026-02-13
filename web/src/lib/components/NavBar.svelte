@@ -1,6 +1,7 @@
 <script>
   import { router } from '../router.svelte.js';
   import { spreadsheetStore } from '../stores/spreadsheet.svelte.js';
+  import { folderStore } from '../stores/folder.svelte.js';
   import UserMenu from './UserMenu.svelte';
   import SpreadsheetInfo from './SpreadsheetInfo.svelte';
 
@@ -44,6 +45,38 @@
         {#if spreadsheetStore.hasSpreadsheet && spreadsheetStore.isValidated}
           <SpreadsheetInfo />
         {/if}
+
+        <!-- Quick access links -->
+        <div class="flex items-center gap-2">
+          {#if folderStore.folderUrl}
+            <a
+              href={folderStore.folderUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open Drive folder"
+              class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+              </svg>
+            </a>
+          {/if}
+
+          {#if spreadsheetStore.spreadsheetUrl}
+            <a
+              href={spreadsheetStore.spreadsheetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open Google Sheet"
+              class="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+              </svg>
+            </a>
+          {/if}
+        </div>
+
         <UserMenu />
       </div>
     </div>
